@@ -47,6 +47,14 @@ load_config_data() {
     extract_root="$system_root/extracts"
 }
 
-get_ring_path $1
-load_config_data $2
+# Routine to walk through the ECC and RSA pair of certs
+store_cert_pair() { # $ring_id $cert_id
+    load_config_data $2
+    get_ring_path $1
+    for target_algo in ecc rsa; do
+        printf "Store the %s-based cert\n" $target_algo
+    done
+}
+
+store_cert_pair "$1" "$2"
 
