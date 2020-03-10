@@ -1,0 +1,22 @@
+#! /usr/bin/env bash
+
+# The first and last keyring to search through. One is always
+# required, and the indexing is limited to lower alpha (a-z).
+# If the list is searched, it is processed in ASCII order, and
+# any gaps are an error.
+first_ring='a'
+last_ring='b'
+
+# The names of keyrings to make available to the script. There
+# must be one for each of the range covered above. There may also
+# be any others which are desired in the format 'ring_<name>' where
+# '<name>" is the name used on the command line or withing the
+# script.
+#     NOTE: In all cases, the named directory must already exist and
+#     have the proper files and permissions (0x0600) to be used as a
+#     GnuPG keyring.
+ring_a="$system_root/.gnupg"
+ring_b="$system_root/.gnupg2"
+ring_source="$system_root/.gnupg"
+ring_new="$system_root/.gnupg2"
+
