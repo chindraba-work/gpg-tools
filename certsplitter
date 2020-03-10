@@ -1,0 +1,52 @@
+#! /usr/bin/env bash
+set -o pipefail
+
+source ./.config
+
+auth_filter='a'
+crypt_filter='e'
+sign_filter='s'
+ecc_filter='..25519'
+rsa_filter=':23'
+
+# Routine for error condition messages and aborting.
+report_error() {
+    printf "%s\n" "$1"
+    exit 1
+}
+
+# Routine to convert a ring_name to a path
+get_ring_path() {
+    [ -z $1 ] && \
+        report_error "No keyring name supplied. Nothing to do."
+    var_name="ring_${1,,}"
+    test_path="${!var_name}"
+    [ -d "$test_path" ] || \
+        report_error "Invalid keyring name $1. Nothing to do."
+    ring_path="$test_path"
+}
+
+# Routine to load cert config data
+load_config_data() {
+    [ -z $1 ] && \
+        report_error "No config file given. Nothing to do."
+    config_name="${1^^}"
+    config_file="$config_dir/$config_name.cfg"
+    [ -e "$config_file" ] || \
+        report_error "Config file for '$1' not found. Nothing to do."
+    source "$config_file"
+    var_name="${config_name}_pfx"
+    key_pfx="${!var_name}"
+    var_name="${config_name}_title"
+    key_title="${!var_name}"
+    var_name="${config_name}_user"
+    key_user="${!var_name}"
+    var_name="${config_name}_primary_uid"
+    key_uid="${!var_name}"
+    export_root="$system_root/exports/$key_pfx"
+    extract_root="$system_root/extracts"
+}
+
+get_ring_path $1
+load_config_data $2
+
