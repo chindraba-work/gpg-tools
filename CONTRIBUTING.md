@@ -49,13 +49,13 @@ Once the project reaches a state where it is truly "usable" an initial release w
 
 
   [DC]: http://developercertificate.org/
-  [DCO]: https://github.com/chindraba-work/GPGCertSplitter/blob/master/DCO.md
-  [LMD]: https://github.com/chindraba-work/GPGCertSplitter/blob/master/LICENSE.md
+  [DCO]: https://github.com/chindraba-work/gpg-tools/blob/master/DCO.md
+  [LMD]: https://github.com/chindraba-work/gpg-tools/blob/master/LICENSE.md
   [GPG-HELP]: https://help.github.com/articles/generating-a-new-gpg-key/
   [GPG]: https://www.gnupg.org/
   [KIO]: https://keybase.io/
   [MIT-HOST]: https://pgp.mit.edu/
   [APP]: https://keybase.io/download
   [NCOC]: https://github.com/domgetter/NCoC
-  [ISSUE]: https://github.com/chindraba-work/GPGCertSplitter/issues
-  [PULL]: https://github.com/chindraba-work/GPGCertSplitter/pulls
+  [ISSUE]: https://github.com/chindraba-work/gpg-tools/issues
+  [PULL]: https://github.com/chindraba-work/gpg-tools/pulls

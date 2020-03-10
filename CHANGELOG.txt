@@ -1,4 +1,4 @@
-GPGCertSplitter
+gpg-tools
 
 Changelog
 

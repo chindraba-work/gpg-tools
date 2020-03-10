@@ -1,4 +1,4 @@
-GPGCertSplitter
+gpg-tools
 
 Contents
 
@@ -23,7 +23,7 @@ its operation in most other Unix shells.)
 
 Version Numbers
 
-GPGCertSplitter uses Semantic Versioning v2.0.0
+gpg-tools uses Semantic Versioning v2.0.0
 <https://semver.org/spec/v2.0.0.html> as created by Tom Preston-Werner
 <http://tom.preston-werner.com/>, inventor of Gravatars and cofounder
 of GitHub.

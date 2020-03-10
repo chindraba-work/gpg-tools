@@ -1,4 +1,4 @@
-# GPGCertSPlitter
+# gpg-tools
 
 ## Contents
 
@@ -26,7 +26,7 @@ _[The program is written in Bash script and uses "Bashisms" which limit its oper
 
 ## Version Numbers
 
-GPGCertSPlitter uses [Semantic Versioning v2.0.0][semver] as created by [Tom Preston-Werner][tom], inventor of Gravatars and cofounder of GitHub.
+gpg-tools uses [Semantic Versioning v2.0.0][semver] as created by [Tom Preston-Werner][tom], inventor of Gravatars and cofounder of GitHub.
 
 Version numbers take the form `X.Y.Z` where `X` is the major version, `Y` is the minor version and `Z` is the patch version. The meaning of the different levels are:
 
