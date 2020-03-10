@@ -44,7 +44,36 @@ load_config_data() {
     var_name="${config_name}_primary_uid"
     key_uid="${!var_name}"
     export_root="$system_root/exports/$key_pfx"
+    mkdir -p "$system_root/exports"
     extract_root="$system_root/extracts"
+    mkdir -p "$system_root/extracts"
+}
+
+# Change the passpharse on a certificate
+new_pass() {  # $ring_path $cert_id $old_pass $new_pass
+printf " IN: %s\n" "new_pass"
+}
+
+# Extract public and secret, primary and sub keys to files
+store_cert() { # $algo
+    [ -z $1 ] && \
+        give_error "No algorithm specified. Cannot select a single cert. Aborting."
+    algo="${1,,}"
+    var_name="${config_name}_${algo}_sec"
+    cert_id="${!var_name}"
+    var_name="${algo}_filter"
+    algo_filter="${!var_name}"
+    dest_base="$export_root.$algo.key"
+    # Save the primary key to files
+    store_prime
+    # Need to have the subkeys stored with a different passpharse than the master
+    new_pass "$ring_path" "$cert_id" "${pass_main}" "${pass_base}${config_name}"
+    for purpose in sign crypt auth; do
+        # Save the subkeys to files
+        store_subkey
+    done
+    # Reverse the passpharse change
+    new_pass "$ring_path" "$cert_id" "${pass_base}${config_name}" "${pass_main}"
 }
 
 # Routine to walk through the ECC and RSA pair of certs
@@ -52,8 +81,18 @@ store_cert_pair() { # $ring_id $cert_id
     load_config_data $2
     get_ring_path $1
     for target_algo in ecc rsa; do
-        printf "Store the %s-based cert\n" $target_algo
+        store_cert $target_algo
     done
+}
+
+# Extract the primary key to files for storage
+store_prime() {
+printf "%s\n" " IN: store_prime"
+}
+
+# Extract the secret and public, and possibly SSH sub keys to files
+store_subkey() {
+printf " IN: %s\n" "store_subkey"
 }
 
 store_cert_pair "$1" "$2"
