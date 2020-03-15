@@ -51,13 +51,19 @@ load_config_data() {
 
 # Change the passpharse on a certificate
 new_pass() {  # $ring_path $cert_id $old_pass $new_pass
-printf " IN: %s\n" "new_pass"
+    [ -z $1 ] && \
+        report_error "No keyring named, not changing passphrase for $change_id in all keyrings."
+    change_ring="$1"
+    change_id="${2// /}"
+    checking="$(printf "%s\n%s\n%s\n" "$3" "$4" "$4" | gpg --homedir $change_ring --batch --yes --expert --pinentry-mode loopback --command-fd 0 --passwd "$change_id" 2>/dev/null)"
+    [ 0 == $? ] || \
+        report_error "Changing passphrase on $change_id failed."
 }
 
 # Extract public and secret, primary and sub keys to files
 store_cert() { # $algo
     [ -z $1 ] && \
-        give_error "No algorithm specified. Cannot select a single cert. Aborting."
+        report_error "No algorithm specified. Cannot select a single cert. Aborting."
     algo="${1,,}"
     var_name="${config_name}_${algo}_sec"
     cert_id="${!var_name}"
