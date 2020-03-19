@@ -10,13 +10,14 @@ ecc_filter='..25519'
 rsa_filter=':23'
 
 # Routine for error condition messages and aborting.
-report_error() {
-    printf "%s\n" "$1"
+report_error() { # $message
+    printf "%s\n" "$1" >&2
     exit 1
 }
 
 # Routine to convert a ring_name to a path
-get_ring_path() {
+get_ring_path() { # $ring_name
+printf " IN: %s %s\n" "get_ring_path" "$(printf "%s " $@)" >&2
     [ -z $1 ] && \
         report_error "No keyring name supplied. Nothing to do."
     var_name="ring_${1,,}"
@@ -28,7 +29,8 @@ get_ring_path() {
 }
 
 # Routine to load cert config data
-check_config_data() {
+check_config_data() { # $config_name
+printf " IN: %s %s\n" "check_config_data" "$(printf "%s " $@)" >&2
     [ -z $1 ] && \
         report_error "No config file given. Nothing to do."
     config_file="$config_dir/${1^^}.cfg"
@@ -39,6 +41,7 @@ check_config_data() {
 
 # Change the passpharse on a certificate
 new_pass() {  # $ring_path $cert_id $old_pass $new_pass
+printf " IN: %s %s\n" "new_pass" "$(printf "%s " $@)" >&2
     [ -z $1 ] && \
         report_error "No keyring named, not changing passphrase for $2 in all keyrings."
     change_ring="$1"
@@ -50,6 +53,7 @@ new_pass() {  # $ring_path $cert_id $old_pass $new_pass
 
 # Extract public and secret, primary and sub keys to files
 store_cert() { # $keyring_path $data_pfx $target_algo
+printf " IN: %s %s\n" "store_cert" "$(printf "%s " $@)" >&2
     [ -z $1 ] && \
         report_error "No keyring specified. Cannot select a cert. Aborting."
     cert_path="$1"
@@ -64,7 +68,7 @@ store_cert() { # $keyring_path $data_pfx $target_algo
     var_name="${algo}_filter"
     algo_filter="${!var_name}"
     # Save the primary key to files
-    store_prime
+    store_prime "$cert_path" "$cert_id" "$cert_pfx"
     # Need to have the subkeys stored with a different passpharse than the master
     new_pass "$cert_path" "$cert_id" "${pass_main}" "${pass_base}${config_pfx}"
     for purpose in sign crypt auth; do
@@ -77,6 +81,7 @@ store_cert() { # $keyring_path $data_pfx $target_algo
 
 # Routine to walk through the ECC and RSA pair of certs
 store_cert_pair() { # $ring_id $cert_id
+printf " IN: %s %s\n" "store_cert_pair" "$(printf "%s " $@)" >&2
     keyring_path=$(get_ring_path $1)
     [ 0 -eq $? ] || \
         report_error "$keyring_path"
@@ -86,18 +91,49 @@ store_cert_pair() { # $ring_id $cert_id
     source "$data_file"
     data_pfx="${2^^}"
     for target_algo in ecc rsa; do
-        store_cert $keyring_path $data_pfx $target_algo
+        store_cert "$keyring_path" $data_pfx $target_algo
     done
 }
 
 # Extract the primary key to files for storage
-store_prime() {
-printf "%s\n" " IN: store_prime"
+store_prime() { # $cert_path $cert_id $cert_pfx
+printf " IN: %s %s\n" "store_prime" "$(printf "%s " $@)" >&2
+    prime_path="$1"
+    prime_id="${2// /}"
+    prime_pfx="${3^^}"
+    store_prime_pub
+    store_prime_sec
+    new_pass "$prime_path" "$prime_id" "${pass_main}" "${prime_base}${pass_base}${prime_pfx}"
+printf "%s %s cert pass for %s %s\n" "$prime_pfx" "$algo" "primes" "set"
+    store_prime_sec_backup_asc
+    store_prime_sec_backup_gpg
+    new_pass "$prime_path" "$prime_id" "${prime_base}${pass_base}${prime_pfx}" "${pass_main}"
+printf "%s %s cert pass for %s %s\n" "$prime_pfx" "$algo" "primes" "reset"
+}
+
+# Store the primary public key of the cert (asc format)
+store_prime_pub() {
+printf " IN: %s %s\n" "store_prime_pub" "$(printf "%s " $@)" >&2
+}
+
+# Store the primary secret key of the cert for backup (gpg format)
+store_prime_sec() {
+printf " IN: %s %s\n" "store_prime_sec" "$(printf "%s " $@)" >&2
+}
+
+# Store the primary secret key of the cert (asc format)
+store_prime_sec_backup_asc() {
+printf " IN: %s %s\n" "store_prime_sec_backup_asc" "$(printf "%s " $@)" >&2
+}
+
+# Store the primary secret key of the cert (gpg format)
+store_prime_sec_backup_gpg() {
+printf " IN: %s %s\n" "store_prime_sec_backup_gpg" "$(printf "%s " $@)" >&2
 }
 
 # Extract the secret and public, and possibly SSH sub keys to files
 store_subkey() {
-printf " IN: %s\n" "store_subkey"
+printf " IN: %s %s\n" "store_subkey" "$(printf "%s " $@)" >&2
 }
 
 store_cert_pair "$1" "$2"
