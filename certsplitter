@@ -11,84 +11,99 @@ rsa_filter=':23'
 
 # Routine for error condition messages and aborting.
 report_error() { # $message
-    printf "%s\n" "$1" >&2
+    printf "ERROR: %s Aborting.\n" "$1" >&2
+    exit 1
+}
+
+# Routine for reporting that there is nothing to do, for whatever reason
+report_nothing() { # $message
+    printf "%s Nothing to do.\n" "$1" >&2
     exit 1
 }
 
 # Routine to convert a ring_name to a path
 get_ring_path() { # $ring_name
-printf " IN: %s %s\n" "get_ring_path" "$(printf "%s " $@)" >&2
     [ -z $1 ] && \
-        report_error "No keyring name supplied. Nothing to do."
+        report_nothing "No keyring name supplied."
     var_name="ring_${1,,}"
     test_path="${!var_name}"
     [ -d "$test_path" ] || \
-        report_error "Invalid keyring name $1. Nothing to do."
+        report_error "Invalid keyring name $1."
     work_path="$test_path"
     printf "%s" "$work_path"
 }
 
 # Routine to load cert config data
 check_config_data() { # $config_name
-printf " IN: %s %s\n" "check_config_data" "$(printf "%s " $@)" >&2
     [ -z $1 ] && \
-        report_error "No config file given. Nothing to do."
+        report_nothing "No config file given."
     config_file="$config_dir/${1^^}.cfg"
     [ -e "$config_file" ] || \
-        report_error "Config file for '$1' not found. Nothing to do."
+        report_error "Config file for '$1' not found."
     printf "%s" "$config_file"
 }
 
 # Routine to check the given keyring for the selected cert
 check_prime() { # $keyring_path $cert_id
-printf " IN: %s %s\n" "check_prime" "$(printf "%s " $@)" >&2
     [ -z $1 ] && \
-        report_error "No keyring specified. Cannot test for a cert. Aborting."
+        report_nothing "No keyring specified. Cannot test for a cert."
     [ -z "$2" ] && \
-        report_error "No certificate specified. Cannot test for a cert. Aborting."
+        report_nothing "No certificate specified. Cannot test for a cert."
     find_id="${2// /}"
     test_id="$(\
         gpg \
             --homedir "$1" \
             --with-colons \
-            --list-secret-keys $find_id 2>/dev/null \
+            --list-secret-keys $find_id \
+        2>/dev/null \
         | grep -A 1 ^sec \
         | tail -n 1 \
         | awk -F : -e '{printf $10}'\
     )"
     [ 0 -eq $? ] || \
-        report_error "Error in searching keyring $1 for cert id '$2'. Aborting."
+        report_error "Searching keyring $1 for cert id '$2' failed."
     [ "$test_id" == "$find_id" ] || \
-        report_error "Searching for $find_id in keyring $1 returned $test_id. Mismatched ID's. Aborting."
+        report_error "Searching for $find_id in keyring $1 returned $test_id. Mismatched ID's."
+    printf "%s" $test_id
 }
 
 # Change the passpharse on a certificate
 new_pass() {  # $ring_path $cert_id $old_pass $new_pass
-printf " IN: %s %s\n" "new_pass" "$(printf "%s " $@)" >&2
     [ -z $1 ] && \
-        report_error "No keyring named, not changing passphrase for $2 in all keyrings."
+        report_nothing "No keyring named, not changing passphrase for $2 in all keyrings."
     change_ring="$1"
     change_id="${2// /}"
-    checking="$(printf "%s\n%s\n%s\n" "$3" "$4" "$4" | gpg --homedir $change_ring --batch --yes --expert --pinentry-mode loopback --command-fd 0 --passwd "$change_id" 2>/dev/null)"
+    checking="$(\
+        printf "%s\n%s\n%s\n" "$3" "$4" "$4" \
+        | gpg \
+            --homedir $change_ring \
+            --batch \
+            --yes \
+            --expert \
+            --pinentry-mode loopback \
+            --command-fd 0 --passwd "$change_id" \
+        2>/dev/null\
+    )"
     [ 0 -eq $? ] || \
         report_error "Changing passphrase on $change_id failed."
 }
 
 # Extract public and secret, primary and sub keys to files
 store_cert() { # $keyring_path $data_pfx $target_algo
-printf " IN: %s %s\n" "store_cert" "$(printf "%s " $@)" >&2
     [ -z $1 ] && \
-        report_error "No keyring specified. Cannot select a cert. Aborting."
+        report_nothing "No keyring specified. Cannot select a cert."
     cert_path="$1"
     [ -z $2 ] && \
-        report_error "No config data supplied. Nothing to do. Aborting."
+        report_nothing "No config data supplied."
     config_pfx="${2^^}"
     [ -z $3 ] && \
-        report_error "No algorithm specified. Cannot select a single cert. Aborting."
+        report_nothing "No algorithm specified. Cannot select a single cert."
     algo="${3,,}"
     var_name="${config_pfx}_${algo}_sec"
     cert_id="${!var_name}"
-    check_prime "$cert_path" "$cert_id"
+    cert_id="$(
+        check_prime "$cert_path" "${!var_name}"
+    )"
     var_name="${algo}_filter"
     algo_filter="${!var_name}"
     # Save the primary key to files
@@ -105,17 +120,19 @@ printf " IN: %s %s\n" "store_cert" "$(printf "%s " $@)" >&2
 
 # Routine to walk through the ECC and RSA pair of certs
 store_cert_pair() { # $ring_id $cert_id
-printf " IN: %s %s\n" "store_cert_pair" "$(printf "%s " $@)" >&2
-    keyring_path=$(get_ring_path $1)
+    keyring_path="$(\
+        get_ring_path $1 \
+    )"
     [ 0 -eq $? ] || \
         report_error "$keyring_path"
-    data_file=$(check_config_data $2)
+    data_file="$(\
+        check_config_data $2 \
+    )"
     [ 0 -eq $? ] || \
         report_error "$data_file"
     source "$data_file"
-    data_pfx="${2^^}"
     for target_algo in ecc rsa; do
-        store_cert "$keyring_path" $data_pfx $target_algo
+        store_cert "$keyring_path" "${2^^}" $target_algo
     done
 }
 
@@ -128,11 +145,9 @@ printf " IN: %s %s\n" "store_prime" "$(printf "%s " $@)" >&2
     store_prime_pub
     store_prime_sec
     new_pass "$prime_path" "$prime_id" "${pass_main}" "${prime_base}${pass_base}${prime_pfx}"
-printf "%s %s cert pass for %s %s\n" "$prime_pfx" "$algo" "primes" "set"
     store_prime_sec_backup_asc
     store_prime_sec_backup_gpg
     new_pass "$prime_path" "$prime_id" "${prime_base}${pass_base}${prime_pfx}" "${pass_main}"
-printf "%s %s cert pass for %s %s\n" "$prime_pfx" "$algo" "primes" "reset"
 }
 
 # Store the primary public key of the cert (asc format)
