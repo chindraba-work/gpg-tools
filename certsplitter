@@ -120,14 +120,10 @@ store_cert() { # $keyring_path $data_pfx $target_algo
 
 # Routine to walk through the ECC and RSA pair of certs
 store_cert_pair() { # $ring_id $cert_id
-    keyring_path="$(\
-        get_ring_path $1 \
-    )"
+    keyring_path="$(get_ring_path $1)"
     [ 0 -eq $? ] || \
         report_error "$keyring_path"
-    data_file="$(\
-        check_config_data $2 \
-    )"
+    data_file="$(check_config_data $2)"
     [ 0 -eq $? ] || \
         report_error "$data_file"
     source "$data_file"
