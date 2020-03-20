@@ -39,6 +39,29 @@ printf " IN: %s %s\n" "check_config_data" "$(printf "%s " $@)" >&2
     printf "%s" "$config_file"
 }
 
+# Routine to check the given keyring for the selected cert
+check_prime() { # $keyring_path $cert_id
+printf " IN: %s %s\n" "check_prime" "$(printf "%s " $@)" >&2
+    [ -z $1 ] && \
+        report_error "No keyring specified. Cannot test for a cert. Aborting."
+    [ -z "$2" ] && \
+        report_error "No certificate specified. Cannot test for a cert. Aborting."
+    find_id="${2// /}"
+    test_id="$(\
+        gpg \
+            --homedir "$1" \
+            --with-colons \
+            --list-secret-keys $find_id 2>/dev/null \
+        | grep -A 1 ^sec \
+        | tail -n 1 \
+        | awk -F : -e '{printf $10}'\
+    )"
+    [ 0 -eq $? ] || \
+        report_error "Error in searching keyring $1 for cert id '$2'. Aborting."
+    [ "$test_id" == "$find_id" ] || \
+        report_error "Searching for $find_id in keyring $1 returned $test_id. Mismatched ID's. Aborting."
+}
+
 # Change the passpharse on a certificate
 new_pass() {  # $ring_path $cert_id $old_pass $new_pass
 printf " IN: %s %s\n" "new_pass" "$(printf "%s " $@)" >&2
@@ -65,6 +88,7 @@ printf " IN: %s %s\n" "store_cert" "$(printf "%s " $@)" >&2
     algo="${3,,}"
     var_name="${config_pfx}_${algo}_sec"
     cert_id="${!var_name}"
+    check_prime "$cert_path" "$cert_id"
     var_name="${algo}_filter"
     algo_filter="${!var_name}"
     # Save the primary key to files
