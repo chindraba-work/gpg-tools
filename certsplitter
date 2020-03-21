@@ -10,45 +10,38 @@ ecc_filter='..25519'
 rsa_filter=':23'
 
 # Routine for error condition messages and aborting.
-report_error() { # $message
+report_error() { # message
     printf "ERROR: %s Aborting.\n" "$1" >&2
     exit 1
 }
 
 # Routine for reporting that there is nothing to do, for whatever reason
-report_nothing() { # $message
+report_nothing() { # message
     printf "%s Nothing to do.\n" "$1" >&2
     exit 1
 }
 
 # Routine to convert a ring_name to a path
-get_ring_path() { # $ring_name
+get_ring_path() { # ring_name
     [ -z $1 ] && \
         report_nothing "No keyring name supplied."
-    var_name="ring_${1,,}"
-    test_path="${!var_name}"
-    [ -d "$test_path" ] || \
+    ring_var="ring_${1,,}"
+    [ -d "${!ring_var}" ] || \
         report_error "Invalid keyring name $1."
-    work_path="$test_path"
-    printf "%s" "$work_path"
+    printf "%s" "${!ring_var}"
 }
 
 # Routine to load cert config data
-check_config_data() { # $config_name
+check_config_data() { # config_prefix
     [ -z $1 ] && \
         report_nothing "No config file given."
-    config_file="$config_dir/${1^^}.cfg"
-    [ -e "$config_file" ] || \
+    [ -e "$config_dir/${1^^}.cfg" ] || \
         report_error "Config file for '$1' not found."
-    printf "%s" "$config_file"
+    printf "%s" "$config_dir/${1^^}.cfg"
 }
 
 # Routine to check the given keyring for the selected cert
-check_prime() { # $keyring_path $cert_id
-    [ -z $1 ] && \
-        report_nothing "No keyring specified. Cannot test for a cert."
-    [ -z "$2" ] && \
-        report_nothing "No certificate specified. Cannot test for a cert."
+check_prime() { # keyring_path cert_id
     find_id="${2// /}"
     test_id="$(\
         gpg \
@@ -68,58 +61,44 @@ check_prime() { # $keyring_path $cert_id
 }
 
 # Change the passpharse on a certificate
-new_pass() {  # $ring_path $cert_id $old_pass $new_pass
-    [ -z $1 ] && \
-        report_nothing "No keyring named, not changing passphrase for $2 in all keyrings."
-    change_ring="$1"
-    change_id="${2// /}"
+new_pass() {  # ring_path key_id old_pass new_pass
     checking="$(\
         printf "%s\n%s\n%s\n" "$3" "$4" "$4" \
         | gpg \
-            --homedir $change_ring \
+            --homedir $1 \
             --batch \
             --yes \
             --expert \
             --pinentry-mode loopback \
-            --command-fd 0 --passwd "$change_id" \
+            --command-fd 0 --passwd "${2// /}" \
         2>/dev/null\
     )"
     [ 0 -eq $? ] || \
-        report_error "Changing passphrase on $change_id failed."
+        report_error "Changing passphrase on ${2// /} failed."
 }
 
 # Extract public and secret, primary and sub keys to files
-store_cert() { # $keyring_path $data_pfx $target_algo
-    [ -z $1 ] && \
-        report_nothing "No keyring specified. Cannot select a cert."
-    cert_path="$1"
-    [ -z $2 ] && \
-        report_nothing "No config data supplied."
-    config_pfx="${2^^}"
-    [ -z $3 ] && \
-        report_nothing "No algorithm specified. Cannot select a single cert."
-    algo="${3,,}"
-    var_name="${config_pfx}_${algo}_sec"
-    cert_id="${!var_name}"
-    cert_id="$(
-        check_prime "$cert_path" "${!var_name}"
+store_cert() { # keyring_path data_pfx target_algo
+    id_name="${2^^}_${3,,}_sec"
+    target_id="$(
+        check_prime "$1" "${!id_name}"
     )"
-    var_name="${algo}_filter"
-    algo_filter="${!var_name}"
+    filter_name="${3,,}_filter"
+    algo_filter="${!filter_name}"
     # Save the primary key to files
-    store_prime "$cert_path" "$cert_id" "$cert_pfx"
+    store_prime "$1" "$target_id" "${2^^}"
     # Need to have the subkeys stored with a different passpharse than the master
-    new_pass "$cert_path" "$cert_id" "${pass_main}" "${pass_base}${config_pfx}"
+    new_pass "$1" "$target_id" "${pass_main}" "${pass_base}${2^^}"
     for purpose in sign crypt auth; do
         # Save the subkeys to files
         store_subkey
     done
     # Reverse the passpharse change
-    new_pass "$cert_path" "$cert_id" "${pass_base}${config_pfx}" "${pass_main}"
+    new_pass "$1" "$target_id" "${pass_base}${2^^}" "${pass_main}"
 }
 
 # Routine to walk through the ECC and RSA pair of certs
-store_cert_pair() { # $ring_id $cert_id
+store_cert_pair() { # ring_id data_prefix
     keyring_path="$(get_ring_path $1)"
     [ 0 -eq $? ] || \
         report_error "$keyring_path"
@@ -133,17 +112,14 @@ store_cert_pair() { # $ring_id $cert_id
 }
 
 # Extract the primary key to files for storage
-store_prime() { # $cert_path $cert_id $cert_pfx
+store_prime() { # keyring_path key_id data_pfx
 printf " IN: %s %s\n" "store_prime" "$(printf "%s " $@)" >&2
-    prime_path="$1"
-    prime_id="${2// /}"
-    prime_pfx="${3^^}"
     store_prime_pub
     store_prime_sec
-    new_pass "$prime_path" "$prime_id" "${pass_main}" "${prime_base}${pass_base}${prime_pfx}"
+    new_pass "$1" "${2// /}" "${pass_main}" "${prime_base}${pass_base}${3^^}"
     store_prime_sec_backup_asc
     store_prime_sec_backup_gpg
-    new_pass "$prime_path" "$prime_id" "${prime_base}${pass_base}${prime_pfx}" "${pass_main}"
+    new_pass "$1" "${2// /}" "${prime_base}${pass_base}${3^^}" "${pass_main}"
 }
 
 # Store the primary public key of the cert (asc format)
