@@ -134,6 +134,7 @@ printf " IN: %s %s\n" "store_prime_pub" "$(printf "%s " $@)" >&2
     gpg \
         --homedir $1 \
         --batch \
+        --yes \
         --expert \
         --armor \
         --output "$5/${!pfx_name}.${4,,}.cert.pub.asc" \
@@ -144,6 +145,7 @@ printf " IN: %s %s\n" "store_prime_pub" "$(printf "%s " $@)" >&2
     gpg \
         --homedir $1 \
         --batch \
+        --yes \
         --expert \
         --armor \
         --output "$5/${!pfx_name}.${4,,}.key.pub.asc" \
