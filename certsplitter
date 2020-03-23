@@ -115,7 +115,7 @@ store_cert_pair() { # ring_id data_prefix
 store_prime() { # keyring_path key_id data_pfx
 printf " IN: %s %s\n" "store_prime" "$(printf "%s " $@)" >&2
     store_prime_pub "$1" "${3,,}" "${2// /}" "$4" "$keyring_dir/exports"
-    store_prime_sec
+    store_prime_sec "$1" "${3,,}" "${2// /}" "$4" "$keyring_dir/extracts" "${pass_main}"
     new_pass "$1" "${2// /}" "${pass_main}" "${prime_base}${pass_base}${3^^}"
     store_prime_sec_backup_asc
     store_prime_sec_backup_gpg
@@ -124,7 +124,6 @@ printf " IN: %s %s\n" "store_prime" "$(printf "%s " $@)" >&2
 
 # Store the full public cert and the primary key of the cert (asc format)
 store_prime_pub() { # keyring_path data_pfx key_id algo save_path
-printf " IN: %s %s\n" "store_prime_pub" "$(printf "%s " $@)" >&2
     [ -d "$5" ] || mkdir -p "$5" 2>/dev/null
     [ 0 -eq $? ] || \
         report_error "Destination path '$5' not available."
@@ -156,8 +155,25 @@ printf " IN: %s %s\n" "store_prime_pub" "$(printf "%s " $@)" >&2
 }
 
 # Store the primary secret key of the cert for backup (gpg format)
-store_prime_sec() {
-printf " IN: %s %s\n" "store_prime_sec" "$(printf "%s " $@)" >&2
+store_prime_sec() { # keyring_path data_pfx key_id algo save_path passphrase
+    [ -d "$5" ] || mkdir -p "$5" 2>/dev/null
+    [ 0 -eq $? ] || \
+        report_error "Destination path '$5' not available."
+    pfx_name="${2^^}_pfx"
+    file_pfx="${!pfx_name}"
+    key_name="${2^^}_user"
+    printf "%s" "$6" |
+    gpg \
+        --homedir $1 \
+        --batch \
+        --yes \
+        --expert \
+        --pinentry-mode loopback \
+        --passphrase-fd 0 \
+        --output "$5/${!pfx_name}.${4,,}.cert.sec.gpg" \
+        --export-secret-key $3 2>/dev/null
+    [ 0 == $? ] || \
+        report_error "Saving of ${4^^} backup cert for ${2^^} failed."
 }
 
 # Store the primary secret key of the cert (asc format)
