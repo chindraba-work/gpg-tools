@@ -60,6 +60,55 @@ check_prime() { # keyring_path cert_id
     printf "%s" $test_id
 }
 
+# Extract a key, or cert, from the keyring
+extract_key() { # dir config target algo save_dir [('asc')|'gpg' [('key')|'cert [('pub')|'sec' [pass]]]]
+printf " IN: %s %s\n" "extract_key" "$(printf "%s " $@)" >&2
+    key_name="${2^^}_user"
+    pfx_name="${2^^}_pfx"
+    file_pfx="${!pfx_name}"
+    [ -d "$5" ] || mkdir -p "$5" 2>/dev/null
+    [ 0 -eq $? ] || \
+        report_error "Destination path '$5' not available."
+    if [ 'gpg' == "${6,,}" ]; then
+        armor=''
+        format='GPG'
+    else
+        armor='--armor'
+        format='ASC'
+    fi
+    if [ 'cert' == "${7,,}" ]; then
+        target=$3
+        target_label='cert'
+    else
+        target="$3!"
+        target_label='key'
+    fi
+    if [ 'sec' == "${8,,}" ]; then
+        export_type='-secret-key'
+        note_type='secret'
+        export_label='sec'
+    else
+        export_type=''
+        note_type='public'
+        export_label='pub'
+    fi
+    [ -z "$9" ] && pass='' || pass="$9"
+    file_note="${4^^} $note_type ${8,,} for ${!key_name}"
+    printf "%s" "$pass" |
+    gpg \
+        --homedir $1 \
+        --batch \
+        --yes \
+        --expert \
+        --pinentry-mode loopback \
+        --passphrase-fd 0 \
+        --output "$5/${!pfx_name}.${4,,}.$target_label.$export_label.${format,,}" \
+        --comment "$file_note" $armor \
+        --export$export_type $target
+    [ 0 == $? ] || \
+        report_error "Saving of $note in $format format failed."
+}
+
 # Change the passpharse on a certificate
 new_pass() {  # ring_path key_id old_pass new_pass
     checking="$(\
@@ -100,11 +149,9 @@ store_cert() { # keyring_path data_pfx target_algo
 # Routine to walk through the ECC and RSA pair of certs
 store_cert_pair() { # ring_id data_prefix
     keyring_path="$(get_ring_path $1)"
-    [ 0 -eq $? ] || \
-        report_error "$keyring_path"
+    [ 0 -eq $? ] || exit 1
     data_file="$(check_config_data $2)"
-    [ 0 -eq $? ] || \
-        report_error "$data_file"
+    [ 0 -eq $? ] || exit 1
     source "$data_file"
     for target_algo in ecc rsa; do
         store_cert "$keyring_path" "${2^^}" $target_algo
@@ -124,131 +171,25 @@ printf " IN: %s %s\n" "store_prime" "$(printf "%s " $@)" >&2
 
 # Store the full public cert and the primary key of the cert (asc format)
 store_prime_pub() { # keyring_path data_pfx key_id algo save_path
-    [ -d "$5" ] || mkdir -p "$5" 2>/dev/null
-    [ 0 -eq $? ] || \
-        report_error "Destination path '$5' not available."
-    pfx_name="${2^^}_pfx"
-    file_pfx="${!pfx_name}"
-    key_name="${2^^}_user"
-    gpg \
-        --homedir $1 \
-        --batch \
-        --yes \
-        --expert \
-        --armor \
-        --output "$5/${!pfx_name}.${4,,}.cert.pub.asc" \
-        --comment "Full ${4^^} public key for ${!key_name}" \
-        --export $3 2>/dev/null
-    [ 0 == $? ] || \
-        report_error "Saving of public cert ${4^^} for ${2^^} failed."
-    printf "%s" "$6" |
-    gpg \
-        --homedir $1 \
-        --batch \
-        --yes \
-        --expert \
-        --armor \
-        --output "$5/${!pfx_name}.${4,,}.key.pub.asc" \
-        --comment "Primary ${4^^} public key for ${!key_name}" \
-        --export $3! 2>/dev/null
-    [ 0 == $? ] || \
-        report_error "Saving of prime public key ${4^^} for ${2^^} failed."
+    extract_key $1 $2 $3 $4 "${5}"
+    extract_key $1 $2 $3 $4 "${5}" 'asc' 'cert' 
 }
 
 # Store the primary secret key of the cert for backup (gpg format)
 store_prime_sec() { # keyring_path data_pfx key_id algo save_path passphrase
-    [ -d "$5" ] || mkdir -p "$5" 2>/dev/null
-    [ 0 -eq $? ] || \
-        report_error "Destination path '$5' not available."
-    pfx_name="${2^^}_pfx"
-    file_pfx="${!pfx_name}"
-    key_name="${2^^}_user"
-    printf "%s" "$6" |
-    gpg \
-        --homedir $1 \
-        --batch \
-        --yes \
-        --expert \
-        --pinentry-mode loopback \
-        --passphrase-fd 0 \
-        --output "$5/${!pfx_name}.${4,,}.cert.sec.gpg" \
-        --export-secret-key $3 2>/dev/null
-    [ 0 == $? ] || \
-        report_error "Saving of ${4^^} backup cert for ${2^^} failed."
+    extract_key $1 $2 $3 $4 "${5}" 'gpg' 'cert' 'sec' "$6"
 }
 
 # Store the primary secret key of the cert (asc format)
 store_prime_sec_backup_asc() {
-printf " IN: %s %s\n" "store_prime_sec_backup_asc" "$(printf "%s " $@)" >&2
-    [ -d "$5" ] || mkdir -p "$5" 2>/dev/null
-    [ 0 -eq $? ] || \
-        report_error "Destination path '$5' not available."
-    pfx_name="${2^^}_pfx"
-    file_pfx="${!pfx_name}"
-    printf "%s" "$6" |
-    gpg \
-        --homedir $1 \
-        --batch \
-        --yes \
-        --expert \
-        --comment "Full ${4^^} secret cert for ${4^^}" \
-        --pinentry-mode loopback \
-        --passphrase-fd 0 \
-        --armor \
-        --output "$5/${!pfx_name}.${4,,}.cert.sec.asc" \
-        --export-secret-key $3 2>/dev/null
-    [ 0 == $? ] || \
-        report_error "Saving of ${4^^} backup ASCII cert for ${2^^} failed."
-    printf "%s" "$6" |
-    gpg \
-        --homedir $1 \
-        --batch \
-        --yes \
-        --expert \
-        --comment "Primary ${4^^} secret key for ${4^^}" \
-        --pinentry-mode loopback \
-        --passphrase-fd 0 \
-        --armor \
-        --output "$5/${!pfx_name}.${4,,}.key.sec.asc" \
-        --export-secret-key $3! 2>/dev/null
-    [ 0 == $? ] || \
-        report_error "Saving of ${4^^} backup ASCII primary key for ${2^^} failed."
+    extract_key $1 $2 $3 $4 "${5}" 'asc' 'cert' 'sec' "$6"
+    extract_key $1 $2 $3 $4 "${5}" 'asc' 'key' 'sec' "$6"
 }
 
 # Store the primary secret key of the cert (gpg format)
 store_prime_sec_backup_gpg() {
-printf " IN: %s %s\n" "store_prime_sec_backup_gpg" "$(printf "%s " $@)" >&2
-    [ -d "$5" ] || mkdir -p "$5" 2>/dev/null
-    [ 0 -eq $? ] || \
-        report_error "Destination path '$5' not available."
-    pfx_name="${2^^}_pfx"
-    file_pfx="${!pfx_name}"
-    printf "%s" "$6" |
-    gpg \
-        --homedir $1 \
-        --batch \
-        --yes \
-        --expert \
-        --comment "Full ${4^^} secret cert for ${4^^}" \
-        --pinentry-mode loopback \
-        --passphrase-fd 0 \
-        --output "$5/${!pfx_name}.${4,,}.cert.sec.gpg" \
-        --export-secret-key $3 2>/dev/null
-    [ 0 == $? ] || \
-        report_error "Saving of ${4^^} backup GPG cert for ${2^^} failed."
-    printf "%s" "$6" |
-    gpg \
-        --homedir $1 \
-        --batch \
-        --yes \
-        --expert \
-        --comment "Primary ${4^^} secret key for ${4^^}" \
-        --pinentry-mode loopback \
-        --passphrase-fd 0 \
-        --output "$5/${!pfx_name}.${4,,}.key.sec.gpg" \
-        --export-secret-key $3! 2>/dev/null
-    [ 0 == $? ] || \
-        report_error "Saving of ${4^^} backup GPG primary key for ${2^^} failed."
+    extract_key $1 $2 $3 $4 "${5}" 'gpg' 'cert' 'sec' "$6"
+    extract_key $1 $2 $3 $4 "${5}" 'gpg' 'key' 'sec' "$6"
 }
 
 # Extract the secret and public, and possibly SSH sub keys to files
