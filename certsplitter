@@ -112,6 +112,43 @@ extract_key() { # keyring_path data_pfx algo target_id save_path [('asc')|'gpg' 
     printf " DONE \n"
 }
 
+# Routine to extract the auth public key in openSSH format
+extract_ssh_key() {
+    pfx_name="${2^^}_pfx"
+    key_uid="${2^^}_primary_uid"
+    algo_flag="${3,,}_filter"
+    var_name="${5}_filter"
+    purpose_flag="${!var_name}"
+    key_grip="$(\
+        gpg \
+            --homedir $1 \
+            --with-colons \
+            --batch \
+            --expert \
+            --list-secret-keys $4 2>/dev/null | \
+            grep -A 2 "ssb:.*:${purpose_flag}:::::${!algo_flag}" | \
+            tail -n 1 | \
+            awk -F : -e '{printf $10"\n"}' \
+    )"
+    [ 0 -eq $? ] || \
+        report_error "Unable to get the key grip for [${purpose_flag}] from ${2^^} in $1."
+    ssh_key="$(\
+        gpg \
+            --homedir $1 \
+            --batch \
+            --expert \
+            --export-ssh-key $purpose_key! 2>/dev/null\
+    )"
+    [ 0 -eq $? ] || \
+        report_error "Unable to get the SSH key for ${2^^}."
+    printf "%s\n" "$ssh_key" > "$export_dir/${!pfx_name}.${3,,}.key.ssh.${3,,}.pub"
+    [ 0 == $? ] || \
+        report_error "Writing of SSH pub file failed."
+    printf "%s\n# %s\n# %s\n" "$key_grip" "${!key_uid}" "$ssh_key" > "$export_dir/${!pfx_name}.${3,,}.key.ssh.${3,,}.sshcontrol"
+    [ 0 == $? ] || \
+        report_error "Writing of sshcontrol file for ${2^^} failed."
+}
+
 # Change the passpharse on a certificate
 new_pass() {
     checking="$(\
@@ -180,7 +217,6 @@ store_prime() {
 
 # Extract the secret and public, and possibly SSH sub keys to files
 store_subkey() { # keyring_path data_pfx algo cert_id purpose
-printf " IN: %s %s\n" "store_subkey" "$(printf "%s " $@)" >&2
     algo_flag="${3,,}_filter"
     var_name="${5}_filter"
     purpose_flag="${!var_name}"
@@ -195,12 +231,14 @@ printf " IN: %s %s\n" "store_subkey" "$(printf "%s " $@)" >&2
             tail -n 1 | \
             awk -F : -e '{printf $10"\n"}'\
     )"
-    [ 0 == $? ] || \
-        report_error "Unable to retreive a subkey for [${purpose_flag^}] from ${2^^} in $1."
+    [ 0 == $? ] || return
     extract_key "$1" "${2,,}" "$3" "$purpose_key" "$export_dir" 'asc' "$5 key" 'pub' "${pass_base}${2^^}"
     extract_key "$1" "${2,,}" "$3" "$purpose_key" "$export_dir" 'gpg' "$5 key" 'pub' "${pass_base}${2^^}"
     extract_key "$1" "${2,,}" "$3" "$purpose_key" "$import_dir" 'asc' "$5 key" 'sec' "${pass_base}${2^^}"
     extract_key "$1" "${2,,}" "$3" "$purpose_key" "$import_dir" 'gpg' "$5 key" 'sec' "${pass_base}${2^^}"
+    [ "auth" == "${5,,}" ] || return
+    [[ ${2^^} == *_SSH* ]] || [[ ${2^^} == *_GIT* ]] || return
+    extract_ssh_key "$1" "${2^^}" "${3,,}" "$4" 'auth'
 }
 
 store_cert_pair "$1" "$2"
