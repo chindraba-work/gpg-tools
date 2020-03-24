@@ -78,7 +78,7 @@ extract_key() { # keyring_path data_pfx algo target_id save_path [('asc')|'gpg' 
     if [ 'cert' == "${7,,}" ]; then
         target=$4
         file_label='cert'
-        note_label='certifcate'
+        note_label='certificate'
     else
         target="$4!"
         file_label=$(echo $7|awk -e '{printf $2"."$1}')
