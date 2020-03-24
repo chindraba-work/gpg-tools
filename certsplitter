@@ -161,35 +161,21 @@ store_cert_pair() { # ring_id data_prefix
 # Extract the primary key to files for storage
 store_prime() { # keyring_path key_id data_pfx
 printf " IN: %s %s\n" "store_prime" "$(printf "%s " $@)" >&2
-    store_prime_pub "$1" "${3,,}" "${2// /}" "$4" "$keyring_dir/exports"
-    store_prime_sec "$1" "${3,,}" "${2// /}" "$4" "$keyring_dir/extracts" "${pass_main}"
+    # save the primary public key
+    extract_key "$1" "${3,,}" "${2// /}" "$4" "$export_dir" 'asc' 'key' 'pub'
+    # save the full public cert
+    extract_key "$1" "${3,,}" "${2// /}" "$4" "$export_dir" 'asc' 'cert' 'pub'
+    # save the full secret cert
+    extract_key "$1" "${3,,}" "${2// /}" "$4" "$extract_dir" 'gpg' 'cert' 'sec' "${pass_main}"
+    # change the passphrase for backup files
     new_pass "$1" "${2// /}" "${pass_main}" "${prime_base}${pass_base}${3^^}"
-    store_prime_sec_backup_asc "$1" "${3,,}" "${2// /}" "$4" "$keyring_dir/imports" "${prime_base}${pass_base}${3^^}"
-    store_prime_sec_backup_gpg "$1" "${3,,}" "${2// /}" "$4" "$keyring_dir/imports" "${prime_base}${pass_base}${3^^}"
+    # save the primary secret key and full secret cert in asc and gpg formats
+    extract_key "$1" "${3,,}" "${2// /}" "$4" "$import_dir" 'asc' 'key' 'sec' "${prime_base}${pass_base}${3^^}"
+    extract_key "$1" "${3,,}" "${2// /}" "$4" "$import_dir" 'asc' 'cert' 'sec' "${prime_base}${pass_base}${3^^}"
+    extract_key "$1" "${3,,}" "${2// /}" "$4" "$import_dir" 'gpg' 'key' 'sec' "${prime_base}${pass_base}${3^^}"
+    extract_key "$1" "${3,,}" "${2// /}" "$4" "$import_dir" 'gpg' 'cert' 'sec' "${prime_base}${pass_base}${3^^}"
+    # reset the passphrase from above
     new_pass "$1" "${2// /}" "${prime_base}${pass_base}${3^^}" "${pass_main}"
-}
-
-# Store the full public cert and the primary key of the cert (asc format)
-store_prime_pub() { # keyring_path data_pfx key_id algo save_path
-    extract_key $1 $2 $3 $4 "${5}"
-    extract_key $1 $2 $3 $4 "${5}" 'asc' 'cert' 
-}
-
-# Store the primary secret key of the cert for backup (gpg format)
-store_prime_sec() { # keyring_path data_pfx key_id algo save_path passphrase
-    extract_key $1 $2 $3 $4 "${5}" 'gpg' 'cert' 'sec' "$6"
-}
-
-# Store the primary secret key of the cert (asc format)
-store_prime_sec_backup_asc() {
-    extract_key $1 $2 $3 $4 "${5}" 'asc' 'cert' 'sec' "$6"
-    extract_key $1 $2 $3 $4 "${5}" 'asc' 'key' 'sec' "$6"
-}
-
-# Store the primary secret key of the cert (gpg format)
-store_prime_sec_backup_gpg() {
-    extract_key $1 $2 $3 $4 "${5}" 'gpg' 'cert' 'sec' "$6"
-    extract_key $1 $2 $3 $4 "${5}" 'gpg' 'key' 'sec' "$6"
 }
 
 # Extract the secret and public, and possibly SSH sub keys to files
