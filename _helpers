@@ -56,6 +56,18 @@ printf "In %s %s\n" 'check_pass' "$(printf "%s " $@)" >&2
     >/dev/null 2>/dev/null
 }
 
+# Routine to find the valid passpharse for a certificate
+find_pass() {
+    good_pass=''
+    for test_pass in $pass_list; do
+        check_pass "$1" "$2" "$test_pass"
+        [ 0 -eq $? ] && \
+            good_pass="$test_pass"
+    done
+    [ -z "$good_pass" ] && \
+        report_error "No known passphrase works on cert ID: '$2'."
+}
+
 # Change the passpharse on a certificate
 new_pass() {
     checking="$(\
