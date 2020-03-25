@@ -41,6 +41,21 @@ check_config_data() {
     printf "%s" "$config_dir/${1^^}.cfg"
 }
 
+# Routine to check a passphrase against a certificate
+check_pass() {
+printf "In %s %s\n" 'check_pass' "$(printf "%s " $@)" >&2
+    printf "%s" "$3" \
+    | gpg \
+        --homedir $1 \
+        --batch \
+        --yes \
+        --expert \
+        --pinentry-mode loopback \
+        --passphrase-fd 0 \
+        --export-secret-key "${2// /}" \
+    >/dev/null 2>/dev/null
+}
+
 # Change the passpharse on a certificate
 new_pass() {
     checking="$(\
