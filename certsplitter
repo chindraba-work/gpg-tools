@@ -98,16 +98,21 @@ store_cert() { # keyring_path data_pfx target_algo
     target_id="$(
         check_prime "$1" "${!id_name}"
     )"
+    good_pass="${pass_main}"
+    printf "Checking for a known passphrase for the ${2^^} ${3^^} cert."
+    check_pass "$1" "$target_id" "$good_pass"
+    [ 0 -eq $? ] || \
+        find_pass "$1" "$target_id"
     # Save the primary key to files
     store_prime "$1" "${2^^}" "${3,,}" "$target_id"
     # Need to have the subkeys stored with a different passpharse than the master
-    new_pass "$1" "$target_id" "${pass_main}" "${pass_base}${2^^}"
+    new_pass "$1" "$target_id" "$good_pass" "${pass_base}${2^^}"
     for purpose in sign crypt auth; do
         # Save the subkeys to files
         store_subkey "$1" "$2" "$3" "$target_id" "$purpose"
     done
-    # Reverse the passpharse change
-    new_pass "$1" "$target_id" "${pass_base}${2^^}" "${pass_main}"
+    # Reverse the passphrase change
+    new_pass "$1" "$target_id" "${pass_base}${2^^}" "$good_pass"
 }
 
 # Routine to walk through the ECC and RSA pair of certs
@@ -129,16 +134,16 @@ store_prime() {
     # save the full public cert
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$export_dir" 'asc' 'cert' 'pub'
     # save the full secret cert
-    extract_key "$1" "${2,,}" "$3" "${4// /}" "$extract_dir" 'gpg' 'cert' 'sec' "${pass_main}"
+    extract_key "$1" "${2,,}" "$3" "${4// /}" "$extract_dir" 'gpg' 'cert' 'sec' "$good_pass"
     # change the passphrase for backup files
-    new_pass "$1" "${4// /}" "${pass_main}" "${prime_base}${pass_base}${2^^}"
+    new_pass "$1" "${4// /}" "$good_pass" "${prime_base}${pass_base}${2^^}"
     # save the primary secret key and full secret cert in asc and gpg formats
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$import_dir" 'asc' 'primary key' 'sec' "${prime_base}${pass_base}${2^^}"
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$import_dir" 'asc' 'cert' 'sec' "${prime_base}${pass_base}${2^^}"
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$import_dir" 'gpg' 'primary key' 'sec' "${prime_base}${pass_base}${2^^}"
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$import_dir" 'gpg' 'cert' 'sec' "${prime_base}${pass_base}${2^^}"
     # reset the passphrase from above
-    new_pass "$1" "${4// /}" "${prime_base}${pass_base}${2^^}" "${pass_main}"
+    new_pass "$1" "${4// /}" "${prime_base}${pass_base}${2^^}" "$good_pass"
 }
 
 # Extract the secret and public, and possibly SSH sub keys to files

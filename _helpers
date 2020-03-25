@@ -43,7 +43,6 @@ check_config_data() {
 
 # Routine to check a passphrase against a certificate
 check_pass() {
-printf "In %s %s\n" 'check_pass' "$(printf "%s " $@)" >&2
     printf "%s" "$3" \
     | gpg \
         --homedir $1 \
