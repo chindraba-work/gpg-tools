@@ -1,7 +1,7 @@
 #! /usr/bin/env bash
 set -o pipefail
 
-source ./.config
+source ./_helpers
 
 # Extract a key, or cert, from the keyring
 extract_key() { # keyring_path data_pfx algo target_id save_path [('asc')|'gpg' [('key')|'cert [('pub')|'sec' [pass]]]]
