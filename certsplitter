@@ -3,63 +3,6 @@ set -o pipefail
 
 source ./.config
 
-auth_filter='a'
-crypt_filter='e'
-sign_filter='s'
-ecc_filter='..25519'
-rsa_filter=':23'
-
-# Routine for error condition messages and aborting.
-report_error() {
-    printf "\nERROR: %s Aborting.\n" "$1" >&2
-    exit 1
-}
-
-# Routine for reporting that there is nothing to do, for whatever reason
-report_nothing() {
-    printf "\n%s Nothing to do.\n" "$1" >&2
-    exit 1
-}
-
-# Routine to convert a ring_name to a path
-get_ring_path() {
-    [ -z $1 ] && \
-        report_nothing "No keyring name supplied."
-    ring_var="ring_${1,,}"
-    [ -d "${!ring_var}" ] || \
-        report_error "Invalid keyring name $1."
-    printf "%s" "${!ring_var}"
-}
-
-# Routine to load cert config data
-check_config_data() {
-    [ -z $1 ] && \
-        report_nothing "No config file given."
-    [ -e "$config_dir/${1^^}.cfg" ] || \
-        report_error "Config file for '$1' not found."
-    printf "%s" "$config_dir/${1^^}.cfg"
-}
-
-# Routine to check the given keyring for the selected cert
-check_prime() {
-    find_id="${2// /}"
-    test_id="$(\
-        gpg \
-            --homedir "$1" \
-            --with-colons \
-            --list-secret-keys $find_id \
-        2>/dev/null \
-        | grep -A 1 ^sec \
-        | tail -n 1 \
-        | awk -F : -e '{printf $10}'\
-    )"
-    [ 0 -eq $? ] || \
-        report_error "Searching keyring $1 for cert id '$2' failed."
-    [ "$test_id" == "$find_id" ] || \
-        report_error "Searching for $find_id in keyring $1 returned $test_id. Mismatched ID's."
-    printf "%s" $test_id
-}
-
 # Extract a key, or cert, from the keyring
 extract_key() { # keyring_path data_pfx algo target_id save_path [('asc')|'gpg' [('key')|'cert [('pub')|'sec' [pass]]]]
     key_name="${2^^}_user"
@@ -147,23 +90,6 @@ extract_ssh_key() {
     printf "%s\n# %s\n# %s\n" "$key_grip" "${!key_uid}" "$ssh_key" > "$export_dir/${!pfx_name}.${3,,}.key.ssh.${3,,}.sshcontrol"
     [ 0 == $? ] || \
         report_error "Writing of sshcontrol file for ${2^^} failed."
-}
-
-# Change the passpharse on a certificate
-new_pass() {
-    checking="$(\
-        printf "%s\n%s\n%s\n" "$3" "$4" "$4" \
-        | gpg \
-            --homedir $1 \
-            --batch \
-            --yes \
-            --expert \
-            --pinentry-mode loopback \
-            --command-fd 0 --passwd "${2// /}" \
-        2>/dev/null\
-    )"
-    [ 0 -eq $? ] || \
-        report_error "Changing passphrase on ${2// /} failed."
 }
 
 # Extract public and secret, primary and sub keys to files
