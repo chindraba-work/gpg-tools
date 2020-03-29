@@ -38,7 +38,7 @@ set -o pipefail
 source ./_helpers
 
 # Extract a key, or cert, from the keyring
-extract_key() { # keyring_path data_pfx algo target_id save_path [('asc')|'gpg' [('key')|'cert [('pub')|'sec' [pass]]]]
+extract_key() {
     key_name="${2^^}_user"
     pfx_name="${2^^}_pfx"
     file_pfx="${!pfx_name}"
@@ -47,19 +47,12 @@ extract_key() { # keyring_path data_pfx algo target_id save_path [('asc')|'gpg' 
         report_error "Destination path '$5' not available."
     if [ 'gpg' == "${6,,}" ]; then
         armor=''
-        format='GPG'
+        format='gpg'
+        format_label='GnuPG'
     else
         armor='--armor'
-        format='ASC'
-    fi
-    if [ 'cert' == "${7,,}" ]; then
-        target=$4
-        file_label='cert'
-        note_label='certificate'
-    else
-        target="$4!"
-        file_label=$(echo $7|awk -e '{printf $2"."$1}')
-        note_label="$7"
+        format='asc'
+        format_label='ASCII armored'
     fi
     if [ 'sec' == "${8,,}" ]; then
         export_type='-secret-key'
@@ -70,9 +63,17 @@ extract_key() { # keyring_path data_pfx algo target_id save_path [('asc')|'gpg' 
         note_type='public'
         export_label='pub'
     fi
+    if [ 'cert' == "${7,,}" ]; then
+        target=$4
+        file_label='cert'
+        file_note="${3^^} $note_type certificate for ${!key_name}"
+    else
+        target="$4!"
+        file_label=$(echo $7|awk -e '{printf $2"."$1"."$3}')
+        file_note="$(echo "${3^^} $7 $note_type"|awk -e '{printf $1" "$5" "$4" "$2" "$3}')"" for ${!key_name}"
+    fi
     [ -z "$9" ] && pass='' || pass="$9"
-    file_note="${3^^} $note_type $note_label for ${!key_name}"
-    printf "Saving %s in %s format ... " "$file_note" $format
+    printf "Saving %s in %s format ... " "$file_note" "$format_label"
     printf "%s" "$pass" |
     gpg \
         --homedir $1 \
@@ -81,11 +82,11 @@ extract_key() { # keyring_path data_pfx algo target_id save_path [('asc')|'gpg' 
         --expert \
         --pinentry-mode loopback \
         --passphrase-fd 0 \
-        --output "$5/${!pfx_name}.${3,,}.$file_label.$export_label.${format,,}" \
+        --output "$5/${!pfx_name}.${3,,}.${file_label^^}.$export_label.$format" \
         --comment "$file_note" $armor \
         --export$export_type $target 2>/dev/null
     [ 0 == $? ] || \
-        report_error "Saving of $file_note in $format format failed."
+        report_error "Saving of $file_note in $format_label format failed."
     printf " DONE \n"
 }
 
@@ -93,7 +94,7 @@ extract_key() { # keyring_path data_pfx algo target_id save_path [('asc')|'gpg' 
 extract_ssh_key() {
     pfx_name="${2^^}_pfx"
     key_uid="${2^^}_primary_uid"
-    algo_flag="${3,,}_filter"
+    algo_flag="${6,,}_filter"
     var_name="${5}_filter"
     purpose_flag="${!var_name}"
     key_grip="$(\
@@ -118,22 +119,22 @@ extract_ssh_key() {
     )"
     [ 0 -eq $? ] || \
         report_error "Unable to get the SSH key for ${2^^}."
-    printf "%s\n" "$ssh_key" > "$export_dir/${!pfx_name}.${3,,}.key.ssh.${3,,}.pub"
+    printf "%s\n" "$ssh_key" > "$export_dir/${!pfx_name}.${3,,}.key.ssh.${6,,}.pub"
     [ 0 == $? ] || \
         report_error "Writing of SSH pub file failed."
-    printf "%s\n# %s\n# %s\n" "$key_grip" "${!key_uid}" "$ssh_key" > "$export_dir/${!pfx_name}.${3,,}.key.ssh.${3,,}.sshcontrol"
+    printf "%s\n# %s\n# %s\n" "$key_grip" "${!key_uid}" "$ssh_key" > "$export_dir/${!pfx_name}.${3,,}.key.ssh.${6,,}.sshcontrol"
     [ 0 == $? ] || \
         report_error "Writing of sshcontrol file for ${2^^} failed."
 }
 
 # Extract public and secret, primary and sub keys to files
-store_cert() { # keyring_path data_pfx target_algo
+store_cert() {
     id_name="${2^^}_${3,,}_sec"
     target_id="$(
         check_prime "$1" "${!id_name}"
     )"
     good_pass="${pass_main}"
-    printf "Checking for a known passphrase for the ${2^^} ${3^^} cert."
+    printf "Checking for a known passphrase for the ${2^^} ${3^^} cert.\n"
     check_pass "$1" "$target_id" "$good_pass"
     [ 0 -eq $? ] || \
         find_pass "$1" "$target_id"
@@ -142,8 +143,10 @@ store_cert() { # keyring_path data_pfx target_algo
     # Need to have the subkeys stored with a different passpharse than the master
     new_pass "$1" "$target_id" "$good_pass" "${pass_base}${2^^}"
     for purpose in sign crypt auth; do
-        # Save the subkeys to files
-        store_subkey "$1" "$2" "$3" "$target_id" "$purpose"
+        for sub_algo in rsa ecc; do
+            # Save the subkeys to files
+            store_subkey "$1" "$2" "$3" "$target_id" "$purpose" "$sub_algo"
+        done
     done
     # Reverse the passphrase change
     new_pass "$1" "$target_id" "${pass_base}${2^^}" "$good_pass"
@@ -164,7 +167,7 @@ store_cert_pair() {
 # Extract the primary key to files for storage
 store_prime() {
     # save the primary public key
-    extract_key "$1" "${2,,}" "$3" "${4// /}" "$export_dir" 'asc' 'primary key' 'pub'
+    extract_key "$1" "${2,,}" "$3" "${4// /}" "$export_dir" 'asc' "primary key ${3^^}" 'pub'
     # save the full public cert
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$export_dir" 'asc' 'cert' 'pub'
     # save the full secret cert
@@ -172,19 +175,19 @@ store_prime() {
     # change the passphrase for backup files
     new_pass "$1" "${4// /}" "$good_pass" "${prime_base}${pass_base}${2^^}"
     # save the primary secret key and full secret cert in asc and gpg formats
-    extract_key "$1" "${2,,}" "$3" "${4// /}" "$import_dir" 'asc' 'primary key' 'sec' "${prime_base}${pass_base}${2^^}"
+    extract_key "$1" "${2,,}" "$3" "${4// /}" "$import_dir" 'asc' "primary key ${3^^}" 'sec' "${prime_base}${pass_base}${2^^}"
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$import_dir" 'asc' 'cert' 'sec' "${prime_base}${pass_base}${2^^}"
-    extract_key "$1" "${2,,}" "$3" "${4// /}" "$import_dir" 'gpg' 'primary key' 'sec' "${prime_base}${pass_base}${2^^}"
+    extract_key "$1" "${2,,}" "$3" "${4// /}" "$import_dir" 'gpg' "primary key ${3^^}" 'sec' "${prime_base}${pass_base}${2^^}"
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$import_dir" 'gpg' 'cert' 'sec' "${prime_base}${pass_base}${2^^}"
     # reset the passphrase from above
     new_pass "$1" "${4// /}" "${prime_base}${pass_base}${2^^}" "$good_pass"
 }
 
 # Extract the secret and public, and possibly SSH sub keys to files
-store_subkey() { # keyring_path data_pfx algo cert_id purpose
-    algo_flag="${3,,}_filter"
+store_subkey() {
     var_name="${5}_filter"
     purpose_flag="${!var_name}"
+    algo_flag="${6,,}_filter"
     purpose_key="$(\
         gpg \
             --homedir $1 \
@@ -197,13 +200,14 @@ store_subkey() { # keyring_path data_pfx algo cert_id purpose
             awk -F : -e '{printf $10"\n"}'\
     )"
     [ 0 == $? ] || return
-    extract_key "$1" "${2,,}" "$3" "$purpose_key" "$export_dir" 'asc' "$5 key" 'pub' "${pass_base}${2^^}"
-    extract_key "$1" "${2,,}" "$3" "$purpose_key" "$export_dir" 'gpg' "$5 key" 'pub' "${pass_base}${2^^}"
-    extract_key "$1" "${2,,}" "$3" "$purpose_key" "$import_dir" 'asc' "$5 key" 'sec' "${pass_base}${2^^}"
-    extract_key "$1" "${2,,}" "$3" "$purpose_key" "$import_dir" 'gpg' "$5 key" 'sec' "${pass_base}${2^^}"
+    extract_key "$1" "${2,,}" "${3^^}" "$purpose_key" "$export_dir" 'asc' "$5 key ${6^^}" 'pub' "${pass_base}${2^^}"
+    extract_key "$1" "${2,,}" "${3^^}" "$purpose_key" "$export_dir" 'gpg' "$5 key ${6^^}" 'pub' "${pass_base}${2^^}"
+    extract_key "$1" "${2,,}" "${3^^}" "$purpose_key" "$import_dir" 'asc' "$5 key ${6^^}" 'sec' "${pass_base}${2^^}"
+    extract_key "$1" "${2,,}" "${3^^}" "$purpose_key" "$import_dir" 'gpg' "$5 key ${6^^}" 'sec' "${pass_base}${2^^}"
     [ "auth" == "${5,,}" ] || return
     [[ ${2^^} == *_SSH* ]] || [[ ${2^^} == *_GIT* ]] || return
-    extract_ssh_key "$1" "${2^^}" "${3,,}" "$4" 'auth'
+    extract_ssh_key "$1" "${2^^}" "${3,,}" "$4" 'auth' "$6"
+    
 }
 
 store_cert_pair "$1" "$2"
