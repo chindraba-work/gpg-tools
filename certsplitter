@@ -82,7 +82,7 @@ extract_key() {
         --expert \
         --pinentry-mode loopback \
         --passphrase-fd 0 \
-        --output "$5/${!pfx_name}.${3,,}.${file_label^^}.$export_label.$format" \
+        --output "$5/${!pfx_name}.${3,,}.${file_label,,}.$export_label.$format" \
         --comment "$file_note" $armor \
         --export$export_type $target 2>/dev/null
     [ 0 == $? ] || \
