@@ -45,18 +45,27 @@ sec_filter='^sec'
 
 # Routine for error condition messages and aborting.
 report_error() {
+# Arg: message to display
+# Return: terminate program/subshell
+# Exitcode: 1
     printf "\nERROR: %s Aborting.\n" "$1" >&2
     exit 1
 }
 
 # Routine for reporting that there is nothing to do, for whatever reason
 report_nothing() {
+# Arg: message to display
+# Return: terminate program/subshell
+# Exitcode: 1
     printf "\n%s Nothing to do.\n" "$1" >&2
     exit 1
 }
 
 # Routine to convert a ring_name to a path
 get_ring_path() {
+# Arg: Name of the keyring, established in the keyring_list file
+# Return: Filesystem path for the keyring
+# Exitcode: T/F valid/invalid path
     [ -z $1 ] && \
         report_nothing "No keyring name supplied."
     ring_var="ring_${1,,}"
@@ -67,6 +76,9 @@ get_ring_path() {
 
 # Routine to load cert config data
 check_config_data() {
+# Arg: Config file basename, case insensitive
+# Return: Filesystem path the usable certificate config file
+# Exitcode: T/F valid/invalid path
     [ -z $1 ] && \
         report_nothing "No config file given."
     [ -e "$config_dir/${1^^}.cfg" ] || \
@@ -76,6 +88,11 @@ check_config_data() {
 
 # Routine to check a passphrase against a certificate
 check_pass() {
+# Args: keyring path
+#       certificate ID
+#       passphrase to test
+# Return: none
+# Exitcode: T/F valid/invalid passphrase
     printf "%s" "$3" \
     | gpg \
         --homedir $1 \
@@ -90,6 +107,10 @@ check_pass() {
 
 # Routine to find the valid passpharse for a certificate
 find_pass() {
+# Args: Keyring path
+#       certificate ID
+# Return: Found passphrase in $good_pass
+# Exitcode: 0 (terminates on error)
     good_pass=''
     for test_pass in $pass_list; do
         check_pass "$1" "$2" "$test_pass"
@@ -102,6 +123,12 @@ find_pass() {
 
 # Change the passpharse on a certificate
 new_pass() {
+# Args: Keyring path
+#       certificate ID
+#       current passphrase
+#       new passphrase
+# Return: nothing
+# Exitcode: 0 (terminates on error)
     checking="$(\
         printf "%s\n%s\n%s\n" "$3" "$4" "$4" \
         | gpg \
@@ -119,6 +146,10 @@ new_pass() {
 
 # Routine to check the given keyring for the selected cert
 check_prime() {
+# Args: Keyring path
+#       certificate ID
+# Retrun: verified certificate ID
+# Exitcode: 0 (terminates on error)
     find_id="${2// /}"
     test_id="$(\
         gpg \
