@@ -33,12 +33,79 @@
 #                                                                      #
 ########################################################################
 
+########################################################################
+#                                                                      #
+#  certsplitter                                                        #
+#      usage: certsplitter <keyring name> <config prefix>              #
+#                                                                      #
+#      Generate a collection of files for a pair of certificates.      #
+#                                                                      #
+#      The <config prefix> is used to identify the actual certs to be  #
+#  processed, and to supply information needed to create the files.    #
+#                                                                      #
+#      The <keyring name> is the name assigned to the desired keyring  #
+#  in the keyring_list file, under the name 'ring_<kerying_name>'.     #
+#                                                                      #
+#      The files saved in the 'exports' directory are the public keys  #
+#  for the files, suitable for copy/paste operations in locations such #
+#  as GitHub or public keyservers, or to be shared via email and other #
+#  electronic communication channels.
+#                                                                      #
+#      The files saved in the 'extracts' directory are the complete    #
+#  certificates, using the existing passphrase, including all ot the   #
+#  secret keys and subkeys. These are intended as a backup of the main #
+#  keyring in an air-gapped system. Using these files it should be a   #
+#  simple operation to recreate the master keyring if needed.          #
+#                                                                      #
+#      The files in the 'imports' directory are saved with a new       #
+#  passphrase, different from those in the 'extracts' directory.       #
+#  These files are intended to be available for import into the user's #
+#  keyring on an network connected system. Each file named with 'key'  #
+#  is a single subkey in isolation, and can be imported as needed to   #
+#  the working keyring. The file names have 3 different formats:       #
+#          <id_pfx>.<cert_algo>.cert.<sec>.<fmt>                       #
+#          <id_pfx>.<cert_algo>.key.<purpose>.<key_algo>.<sec>.<fmt>   #
+#          <id_pfx>.<cert_algo>.key.<purpose>.<key_algo>.<style>       #
+#  Where: <cert_algo> is the algorithm of the primary key.             #
+#              ecc: Ed25519 or rsa: RSA 8192 (or 4096)                 #
+#         <fmt> is the file format, gpg: GnuPG or asc: ASCII-armored   #
+#         <id_pfx> is the *_pfx value from the cert config file        #
+#         <key_algo> is the algorithm of the subkey itself.            #
+#              ecc: Ed25519 (cv25519) or RSA 4096 (or 2048)            #
+#         <purpose> is the purpose of the subkey.                      #
+#              auth: authentication of crypt: encryption or            #
+#              sign: signatures or primary: the cert primary key or    #
+#              ssh: SSH authentication key                             #
+#         <sec> is either 'sec' or 'pub' indicating which of the key   #
+#              pair, secret or public, is saved                        #
+#         <style> is either 'pub', a public key version suitable for   #
+#              pasting into forms online or uploading to a server; or  #
+#              'sshcontrol', a format suitable for adding into the     #
+#              user's sshcontrol file in the keyring directory.        #
+#         key is for subkeys only                                      #
+#         cert is for complete certificates, with all keys included    #
+#  Note that the 'cert' files will have all subkeys, even ones which   #
+#  are not covered by the extracted 'key' files.                       #
+#                                                                      #
+########################################################################
+
 set -o pipefail
 
 source ./_helpers
 
 # Extract a key, or cert, from the keyring
 extract_key() {
+# Args: 1 Keyring path
+#       2 config file basename
+#       3 main key algorithm
+#       4 certificate/key ID
+#       5 Destination path
+#       6 Output format [('gpg')|'asc'] (optional)
+#       7 File content hint(s) [('key')|'cert'|purpose 'key' ['RSA'|'ECC']] (optional)
+#       8 Key pair type [('pub')|'sec'] (optional)
+#       9 passphrase (optional)
+# Return: none
+# Exitcode: 0 (terminates on error)
     key_name="${2^^}_user"
     pfx_name="${2^^}_pfx"
     file_pfx="${!pfx_name}"
@@ -85,13 +152,21 @@ extract_key() {
         --output "$5/${!pfx_name}.${3,,}.${file_label,,}.$export_label.$format" \
         --comment "$file_note" $armor \
         --export$export_type $target 2>/dev/null
-    [ 0 == $? ] || \
+    [ 0 -eq $? ] || \
         report_error "Saving of $file_note in $format_label format failed."
     printf " DONE \n"
 }
 
 # Routine to extract the auth public key in openSSH format
 extract_ssh_key() {
+# Args: 1 Keyring path
+#       2 config file basename
+#       3 main key algorithm 'rsa'|'ecc'
+#       4 certificate/key ID
+#       5 purpose 'auth'|'crypt'|'sign'
+#       6 subkey algorithm 'rsa'|'ecc'
+# Return: none
+# Exitcode: 0 (terminates on error)
     pfx_name="${2^^}_pfx"
     key_uid="${2^^}_primary_uid"
     algo_flag="${6,,}_filter"
@@ -120,15 +195,20 @@ extract_ssh_key() {
     [ 0 -eq $? ] || \
         report_error "Unable to get the SSH key for ${2^^}."
     printf "%s\n" "$ssh_key" > "$export_dir/${!pfx_name}.${3,,}.key.ssh.${6,,}.pub"
-    [ 0 == $? ] || \
+    [ 0 -eq $? ] || \
         report_error "Writing of SSH pub file failed."
     printf "%s\n# %s\n# %s\n" "$key_grip" "${!key_uid}" "$ssh_key" > "$export_dir/${!pfx_name}.${3,,}.key.ssh.${6,,}.sshcontrol"
-    [ 0 == $? ] || \
+    [ 0 -eq $? ] || \
         report_error "Writing of sshcontrol file for ${2^^} failed."
 }
 
 # Extract public and secret, primary and sub keys to files
 store_cert() {
+# Args: 1 Keyring path
+#       2 config file basename
+#       3 main key algorithm 'rsa'|'ecc'
+# Return: none
+# Exitcode: 0 (terminates on error)
     id_name="${2^^}_${3,,}_sec"
     target_id="$(
         check_prime "$1" "${!id_name}"
@@ -154,6 +234,10 @@ store_cert() {
 
 # Routine to walk through the ECC and RSA pair of certs
 store_cert_pair() {
+# Args: 1 Keyring name
+#       2 config file prefix
+# Return: none
+# Exitcode: 0 (terminates on error)
     keyring_path="$(get_ring_path $1)"
     [ 0 -eq $? ] || exit 1
     data_file="$(check_config_data $2)"
@@ -166,6 +250,12 @@ store_cert_pair() {
 
 # Extract the primary key to files for storage
 store_prime() {
+# Args: 1 Keyring path
+#       2 config file basename
+#       3 main key algorithm 'rsa'|'ecc'
+#       4 certificate ID
+# Return: none
+# Exitcode: 0 (terminates on error)
     # save the primary public key
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$export_dir" 'asc' "primary key ${3^^}" 'pub'
     # save the full public cert
@@ -185,6 +275,14 @@ store_prime() {
 
 # Extract the secret and public, and possibly SSH sub keys to files
 store_subkey() {
+# Args: 1 Keyring path
+#       2 config file basename
+#       3 main key algorithm 'rsa'|'ecc'
+#       4 certificate ID
+#       5 subkey purpose 'auth'|''crypt'|'sign'
+#       6 subkey algorithm 'rsa'|'ecc'
+# Return: none
+# Exitcode: 0 (terminates on error)
     var_name="${5}_filter"
     purpose_flag="${!var_name}"
     algo_flag="${6,,}_filter"
@@ -199,7 +297,7 @@ store_subkey() {
             tail -n 1 | \
             awk -F : -e '{printf $10"\n"}'\
     )"
-    [ 0 == $? ] || return
+    [ 0 -eq $? ] || return
     extract_key "$1" "${2,,}" "${3^^}" "$purpose_key" "$export_dir" 'asc' "$5 key ${6^^}" 'pub' "${pass_base}${2^^}"
     extract_key "$1" "${2,,}" "${3^^}" "$purpose_key" "$export_dir" 'gpg' "$5 key ${6^^}" 'pub' "${pass_base}${2^^}"
     extract_key "$1" "${2,,}" "${3^^}" "$purpose_key" "$import_dir" 'asc' "$5 key ${6^^}" 'sec' "${pass_base}${2^^}"
@@ -207,7 +305,6 @@ store_subkey() {
     [ "auth" == "${5,,}" ] || return
     [[ ${2^^} == *_SSH* ]] || [[ ${2^^} == *_GIT* ]] || return
     extract_ssh_key "$1" "${2^^}" "${3,,}" "$4" 'auth' "$6"
-    
 }
 
 store_cert_pair "$1" "$2"

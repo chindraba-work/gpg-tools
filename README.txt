@@ -1,6 +1,7 @@
 gpg-tools
 
 Contents
+======================================================================
 
 * Description
 * Requirements
@@ -9,11 +10,99 @@ Contents
 
 
 Description
+======================================================================
 
 A Bash script for processing a master GPG keyring and producing a
 variety of export files for primary keys and subkeys.
 
+Usage of certsplitter
+----------------------------------------------------------------------
+The certsplitter command takes the name of a keyring and the prefix
+of a configuration file to select a pair of PGP certificates. A set
+of files is created which contain a subset of the subkeys from each
+of the certificates as well as copies of the certificates themselves.
+
+Each subkey is exported in public and secret versions, and in both GPG
+and ASCII-armored formats. The primary keys are also exported as a
+subkey and each certificate is exported in formats for importing into
+an active keyring and for long-term backup.
+
+The file 'keyring_list' is used to list the keyrings which the system
+is able to process certificates in. Each keyring is listed as:
+
+    ring_<name>="/path/to/keyring"
+
+where the <name> is the name accepted as a command parameter. The
+'ring_' portion of the variable name is to be used as is. So an entry
+in the file of 'ring_master="/home/user/.keyring"' would be used as
+'master' on the command line, like 'certsplitter master per'.
+
+Within the keyring list the names 'a' thru 'z' inclusive are able to
+be processed by other commands, in the bounds set in the variables
+'first_ring' and 'last_ring'. There is no limit on the size of the
+list of names, other than the a to z for the automated system to be
+developed later. It is also acceptable for nultiple names to have
+the same path, especially where a 'user-friendly' name is wanted and
+the associated keyring needs to be in the processing list as well.
+
+The file '.config' is designed to hold data needed to run the script,
+and to potentially hold sensitive information. The elements of the
+passphrase can be stored in this file, or the lines for them can be
+commented and the same variable name can be used to pass them into
+the program from the environment. As this system is intended to be
+used in an air-gapped environment, preferably a "live boot" systems,
+so there is less concern over CLI and environment leakage.
+
+Generated files
+---------------------------------------------------------------------
+The created files are placed into 3 directories, each with its own
+intended purpose, and content. 
+
+The 'imports' directory is for the key, and certificate, extracts of
+the secret keys. They have passphrases attached which different than
+the passphrase in the master keyring, and are different between the
+'key' files and the 'cert' files. These files are intended to be
+imported into the user's working keyring on a regularly connected
+system. Not all the 'key' files will necessarily be imported, only
+those which are needed on the system. Additionally, unless extreme
+events occur, the 'cert' files should never be imported. Lacking the
+primary secret key on the working system will prevent modifications
+to the existing subkeys, or other alterations to the certificates.
+
+The 'exports' directory is for the public keys, and certificates, and
+the files are ready to share, using any method appropriate to such,
+so that others will have the public half of the keys. Sharing with 
+contacts via email, adding to public key servers, or adding to an
+account on GitHub are examples of such use. Included in these files
+are versions suitable for SSH use, including the 'sshcontrol' file
+which has a snippet suitable for adding to the user's same-named file
+in their '.gnupg' directory.
+
+The 'extracts' directory has a copy of the full certificates, with
+the same passphrase as the master keyring. These files are a backup
+of the master keyring, and should be kept on the generating system, 
+or in some other secure location. If the master keyring is somehow 
+lost or damaged, these files can be used to replace it.
+
+Sample files
+---------------------------------------------------------------------
+Included in the files are the following:
+
+-   SAMPLE.cfg
+-   SAMPLE_CODE.cfg
+-   SAMPLE_GIT.cfg
+-   SAMPLE_SSH.cfg
+-   SAMPLE.keys
+-   SAMPLE_files.md
+
+The '*cfg' files are examples of what the config files contain, and
+were used to create a group of corresponding keys. The generated keys
+are given in the 'SAMPLE.keys' file. Using that keyring and the '*.cfg
+files, the files created, with their directories, are listed in the 
+'SAMPLE_files.md'.
+
 Requirements
+======================================================================
 
 * GnuPG installed on the system
 * GNU Bash, v4.3, or better bash --version | grep version
@@ -22,6 +111,7 @@ Requirements
 its operation in most other Unix shells.)
 
 Version Numbers
+======================================================================
 
 gpg-tools uses Semantic Versioning v2.0.0
 <https://semver.org/spec/v2.0.0.html> as created by Tom Preston-Werner
@@ -47,6 +137,7 @@ different levels are:
   do not add any features to the program operations or functionality
 
 Copyright and License
+======================================================================
 
 The MIT license applies to all the code within this repository.
 

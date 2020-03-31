@@ -2,4 +2,5 @@
 
 ## Changelog
 
-### v0.0.0
+### v1.0.0
+-   Made the certsplitter command to create files from GPG certs
