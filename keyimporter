@@ -37,4 +37,28 @@ set -o pipefail
 
 source ./_helpers
 
+import_key() {
+    printf "IN import_key with %s\n" "$(printf "%s " $@)"
+}
+
+keyring_path="$(get_ring_path $1)"
+[ 0 -eq $? ] || exit 1
+shift
+data_file="$(check_config_data $1)"
+[ 0 -eq $? ] || exit 1
+config_pfx="${1^^}"
+shift
+source "$data_file"
+if [ 0 -eq "$#" ]; then
+    for method in 'auth' 'crypt' 'sign'; do
+        import_key "$keyring_path" "$config_pfx" "$method" "safe"
+    done
+elif [ 1 -eq "$#" ] && [ 'CERT' == "$1" ]; then
+    import_key "$keyring_path" "$config_pfx" "Primary"
+else
+    while [ 0 -ne "$#" ]; do
+        import_key "$keyring_path" "$config_pfx" "${1,,}"
+        shift
+    done
+fi
 
