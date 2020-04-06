@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+
+# SPDX-License-Identifier: MIT
+
+########################################################################
+#                                                                      #
+#  This file is part of collection of scripts for working with keys    #
+#  and certificates using GnuPG.                                       #
+#                                                                      #
+#  Copyright © 2020  Chindraba (Ronald Lamoreaux)                      #
+#                    <aoc@chindraba.work>                              #
+#  - All Rights Reserved                                               #
+#                                                                      #
+#  Permission is hereby granted, free of charge, to any person         #
+#  obtaining a copy of this software and associated documentation      #
+#  files (the "Software"), to deal in the Software without             #
+#  restriction, including without limitation the rights to use, copy,  #
+#  modify, merge, publish, distribute, sublicense, and/or sell copies  #
+#  of the Software, and to permit persons to whom the Software is      #
+#  furnished to do so, subject to the following conditions:            #
+#                                                                      #
+#  The above copyright notice and this permission notice shall be      #
+#  included in all copies or substantial portions of the Software.     #
+#                                                                      #
+#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,     #
+#  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF  #
+#  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND               #
+#  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS #
+#  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN  #
+#  ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN   #
+#  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE    #
+#  SOFTWARE.                                                           #
+#                                                                      #
+########################################################################
+
+########################################################################
+#                                                                      #
+#  keyimporter                                                         #
+#                                                                      #
+#      Usage keyimporter <keyring_name> <config prefix> [<purpose>]..  #
+#          where <purpose> is one or more of auth, sign, crypt, ssh,   #
+#          or cert.                                                    #
+#                                                                      #
+#      Import keys and certificates from files to the named keyring    #
+#                                                                      #
+#      The <config prefix> is used to identify the actual certs to be  #
+#  processed, and to supply information needed to import the files.    #
+#                                                                      #
+#      The <keyring name> is the name assigned to the desired keyring  #
+#  in the keyring_list file, under the name 'ring_<kerying_name>'.     #
+#                                                                      #
+#       The <purpose> is one or more of auth, sign, crypt, ssh, or     #
+#           cert.                                                      #
+#                                                                      #
+#       Any, or all, except cert may be in the list and each named     #
+#       purpose subkey will be imported. Missing subkey files will     #
+#       cause a fatal error. Use of auth implies ssh when the          #
+#       <config prefix> includes '_SSH' or '_GIT' and will likewise    #
+#       cause a fatal error if the needed files are not available to   #
+#       import. Use of ssh can do the standard importing of SSH files  #
+#       for certificates which are not part of a <config prefix> as    #
+#       listed above. Use of the ssh option also allows importing the  #
+#       SSH data without having to import the auth subkey, though the  #
+#       utility of doing so seems pointless.                           #
+#                                                                      #
+#       A <purpose> of cert must be used with no other purpose or a    #
+#       fatal error is generated.                                      #
+#                                                                      #
+#       If there is no <purpose> listed each of the three subkey types #
+#       which exist for the given cert are imported, if they exist. If #
+#       the <config prefix> contains '_SSH' or '_GIT' and an auth key  #
+#       is found, the SSH data is imported as well, or a fatal error   #
+#       is thrown if the files do not exist. If the subkey files for   #
+#       any of the purposes are missing, they are silently ignored.    #
+#                                                                      #
+########################################################################
+
+set -o pipefail
+
+source ./_helpers
+
+# Routine to import the subkeys for all purposes in a cert
+import_all() {
+# Args: 1 Keyring path
+#       2 Filename prefix
+#       3 config file basename
+#       4 passphrase
+    for method in 'AUTH' 'CRYPT' 'SIGN'; do
+        if [ -e "$import_dir/$2.ecc.key.${method,,}.ecc.sec.gpg" ]; then
+            [[ $3 == *_SSH* ]] || [[ $3 == *_GIT* ]] && [[ $method == AUTH ]] && \
+                import_ssh "$1" "$2"
+            import_key "$1" "$import_dir/$2.ecc.key.${method,,}.ecc.sec.gpg" "$4"
+        fi
+    done
+}
+
+# Routine to import the full certificate
+import_cert() {
+# Args: 1 Keyring path
+#       2 Filename prefix
+#       3 passphrase
+    [ -e "$import_dir/$2.ecc.cert.sec.gpg" ] || \
+        report_error "Required file, '$import_dir/$2.ecc.cert.sec.gpg', missing."
+    import_key "$1" "$import_dir/$2.ecc.cert.sec.gpg" "$3"
+}
+
+# Low-level routine to import a key/cert into the keyring
+import_key() {
+# Args: 1 Keyring path
+#       2 Filename
+#       3 passphrase
+    printf "%s" "$3" | gpg \
+        --homedir "$1" \
+        --batch \
+        --yes \
+        --expert \
+        --pinentry-mode loopback \
+        --passphrase-fd 0 \
+        --import "$2" 2>/dev/null
+}
+
+# Routine to import a single subkey
+import_one() {
+# Args: 1 Keyring path
+#       2 Filename prefix
+#       3 config file basename
+#       4 subkey purpose
+#       5 passphrase
+    case "${4^^}" in
+        AUTH )
+            [[ $3 == *_SSH* ]] || [[ $3 == *_GIT* ]] && \
+                import_ssh "$1" "$2"
+            ;&
+        CRYPT | SIGN )
+            [ -e "$import_dir/$2.key.${4,,}.ecc.sec.gpg" ] &&
+                report_error "Required file, '$import_dir/$2.key.${4,,}.ecc.sec.gpg', missing."
+            import_key "$1" "$import/$2.key.${4,,}.ecc.sec.gpg" "$5"
+            ;;
+        SSH )
+            import_ssh "$2"
+            ;;
+        CERT )
+            report_error "Importing the full certificate is not permitted with other operations."
+            ;;
+        * )
+            report_error "Unknonwn subkey type '${4}'."
+    esac
+}
+
+# Routine to copy the SSH data into the keyring directory
+import_ssh() {
+# Args: 1 Keyring path
+#       2 Filename prefix
+    [ -e "$export_dir/$2.ecc.key.ssh.ecc.pub" ] || \
+        report_error "Rquired file, '$export_dir/$2.ecc.key.ssh.ecc.pub', missing."
+    mkdir -p "$1/.ssh"
+    cp "$export_dir/$2.ecc.key.ssh.ecc.pub" "$1/.ssh/"
+    [ -e "$export_dir/$2.ecc.key.ssh.ecc.sshcontrol" ] || \
+        report_error "Required file, '$export_dir/$2.ecc.key.ssh.ecc.sshcontrol', missing."
+    printf "\n" >> "$1/sshcontrol"
+    cat "$export_dir/$2.ecc.key.ssh.ecc.sshcontrol" >> "$1/sshcontrol"
+}
+
+ssh_path="$HOME/.ssh"
+keyring_path="$(get_ring_path $1)"
+[ 0 -eq $? ] || exit 1
+shift
+data_file="$(check_config_data $1)"
+[ 0 -eq $? ] || exit 1
+config="${1^^}"
+prefix="${1^^}_pfx"
+shift
+source "$data_file"
+if [ 0 -eq "$#" ]; then
+    import_all "$keyring_path" "${!prefix}" "$config" "${pass_base}${config}"
+elif [ 1 -eq "$#" ] && [ 'CERT' == "$1" ]; then
+    import_cert "$keyring_path" "${!prefix}" "${prime_base}${pass_base}${config}"
+else
+    while [ 0 -ne "$#" ]; do
+        import_one "$keyring_path" "${!prefix}" "$config" "$1" "${pass_base}${config}"
+        shift
+    done
+fi
+

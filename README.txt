@@ -4,6 +4,9 @@ Contents
 ======================================================================
 
 * Description
+  * Usage of certsplitter
+  * Usage of keyimporter
+  * Generated files
 * Requirements
 * Version Numbers
 * Copyright and License
@@ -52,6 +55,50 @@ commented and the same variable name can be used to pass them into
 the program from the environment. As this system is intended to be
 used in an air-gapped environment, preferably a "live boot" systems,
 so there is less concern over CLI and environment leakage.
+
+Usage of keyimporter
+---------------------------------------------------------------------
+
+    keyimporter <ring_name> <config prefix>
+    keyimporter <ring_name> <config prefix> cert
+    keyimporter <ring_name> <config prefix> \
+        auth|crypt|sign|ssh [auth|crypt|sign|ssh] ...
+
+The keyimporter command takes the name of a keyring with the prefix
+of a configuration file, and optionally a list of purposes and
+imports the subkeys selected by the configuration file and the listed
+purposes.
+
+Used with the purpose of 'cert', with nothing else in the list, will
+import the full certificate, including the primary key which is
+intended to _not_ be in the working keyring. Placing 'cert' in a list,
+first or otherwise, causes an error.
+
+Used with nothing in the purpose list the available subkey for each
+of the three non-cert purposes will be imported, missing subkeys are
+silently ignored.
+
+Used with a list, one or more, purposes the subkey for each purpose
+will be imported, and any missing subkeys will cause an error.
+
+The list of purposes can include, as well, the value 'ssh' which will
+import the SSH data, regardless of whether or not the config name
+normally would have SSH data imported.
+
+For config prefixes which have '_SSH' or '_GIT' in them, the program
+will attempt to import the SSH data, and error if the files are not
+found. The only exception to that is when the purpose list is blank
+and the auth subkey file is also not available. In silently failing
+for the auth subkey, the program will bypass the attempt to import
+the SSH data.
+
+When importing the SSH data, the 'sshcontrol' file in the named
+keyring directory has the key's data appended, and the SSH formated
+public key is added to the '.ssh' directory within the keyring
+directory. Under normal use with the 'ssh' command these files should
+be in the user's '$HOME/.ssh' directory and they will need to be
+moved or copied to that directory after the import is done.
+
 
 Generated files
 ---------------------------------------------------------------------

@@ -3,6 +3,9 @@
 ## Contents
 
 - [Description](#description)
+  * [Usage of `certsplitter`](#usage-of-certsplitter)
+  * [Usage of `keyimporter`](#usage-of-keyimporter)
+  * [Generated files](#generated-files)
 - [Requirements](#requirements)
 - [Version Numbers](#version-numbers)
 - [Copyright and License](#copyright-and-license)
@@ -30,6 +33,30 @@ where the `<name>` is the name accepted as a command parameter. The `ring_` port
 Within the keyring list the names `a` thru `z` inclusive are able to be processed by other commands, in the bounds set in the variables `first_ring` and `last_ring`. There is no limit on the size of the list of names, other than the `a` to `z` for the automated system to be developed later. It is also acceptable for nultiple names to have the same path, especially where a 'user-friendly' name is wanted and the associated keyring needs to be in the processing list as well.
 
 The file `.config` is designed to hold data needed to run the script, and to potentially hold sensitive information. The elements of the passphrase can be stored in this file, or the lines for them can be commented and the same variable name can be used to pass them into the program from the environment. As this system is intended to be used in an air-gapped environment, preferably a "live boot" systems, so there is less concern over CLI and environment leakage.
+
+### Usage of `keyimporter`
+---
+
+```
+keyimporter <ring_name> <config prefix>
+keyimporter <ring_name> <config prefix> cert
+keyimporter <ring_name> <config prefix> auth|crypt|sign|ssh [auth|crypt|sign|ssh] ...
+```
+
+The `keyimporter` command takes the name of a keyring with the prefix of a configuration file, and optionally a list of purposes and imports the subkeys selected by the configuration file and the listed purposes.
+
+Used with the purpose of `cert`, with nothing else in the list, will import the full certificate, including the primary key which is intended to _not_ be in the working keyring. Placing `cert` in a list, first or otherwise, causes an error.
+
+Used with nothing in the purpose list the available subkey for each of the three non-cert purposes will be imported, missing subkeys are silently ignored.
+
+Used with a list, one or more, purposes the subkey for each purpose will be imported, and any missing subkeys will cause an error.
+
+The list of purposes can include, as well, the value `ssh` which will import the SSH data, regardless of whether or not the config name normally would have SSH data imported.
+
+For config prefixes which have `_SSH` or `_GIT` in them, the program will attempt to import the SSH data, and error if the files are not found. The only exception to that is when the purpose list is blank _and_ the auth subkey file is also not available. In silently failing for the auth subkey, the program will bypass the attempt to import the SSH data.
+
+When importing the SSH data, the `sshcontrol` file in the named keyring directory has the key's data appended, and the SSH formated public key is added to the `.ssh` directory within the keyring directory. Under normal use with the `ssh` command these files should be in the user's `$HOME/.ssh` directory and they will need to be moved or copied to that directory after the import is done.
+
 
 ### Generated files
 ---
