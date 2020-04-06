@@ -2,5 +2,8 @@
 
 ## Changelog
 
+### v1.1.0
+-   Add keyimporter command to import keys from files made using certsplitrer, or any other way.
+
 ### v1.0.0
 -   Made the certsplitter command to create files from GPG certs
