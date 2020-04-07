@@ -93,6 +93,45 @@ set -o pipefail
 
 source ./_helpers
 
+# Dump the advisory content into a revocation certificate
+build_revoke_preface() {
+# Args: 1 Keyring path
+#       2 certificate ID
+#       3 file name
+# Return: none
+# Exitcode: 0 (terminates on error)
+    key_data="$(gpg\
+        --homedir "$1"\
+        --no-options\
+        --with-fingerprint\
+        --with-subkey-fingerprint\
+        --keyid-format long\
+        --list-option show-unusable-uids,show-unusable-subkeys,no-show-uid-validity\
+        --list-public-keys "${2// /}" 2>/dev/null|grep -A 2 pub )"
+    [ 0 -eq "$?" ] ||
+        report_error "Retrieval of key data for ${2// /} failed."
+    cat <<EOT >"$3"
+This is a revocation certificate for the OpenPGP key:
+
+$key_data
+
+A revocation certificate is a kind of "kill switch" to publicly
+declare that a key shall not anymore be used.  It is not possible
+to retract such a revocation certificate once it has been published.
+
+Use it to revoke this key in case of a compromise or loss of
+the secret key.  However, if the secret key is still accessible,
+it is better to generate a new revocation certificate and give
+a reason for the revocation.  For details see the description of
+of the gpg command "--generate-revocation" in the GnuPG manual.
+
+To avoid an accidental use of this file, a colon has been inserted
+before the 5 dashes below.  Remove this colon with a text editor
+before importing and publishing this revocation certificate.
+
+EOT
+}
+
 # Extract a key, or cert, from the keyring
 extract_key() {
 # Args: 1 Keyring path
@@ -202,6 +241,34 @@ extract_ssh_key() {
         report_error "Writing of sshcontrol file for ${2^^} failed."
 }
 
+# Routine to generate a revocation certificate
+generate_revocation() {
+# Args: 1 Keyring path
+#       2 config file basename
+#       3 main key algorithm 'rsa'|'ecc'
+#       4 certificate ID
+#       5 passpharase
+# Return: nothing
+# Exit code: 0 terminates on error
+    prefix="${2^^}_pfx"
+    file_name="$extract_dir/${!prefix}.${3,,}.cert.rev"
+    printf "Generating revocation certificate for the %s cert of %s ... " "${3^^}" "${2^^}"
+    build_revoke_preface "$1" "$4" "$file_name"
+    printf ":" >> "$file_name"
+    script -c "printf \"y\n0\n\ny\n\" | gpg \
+        --homedir \"$1\" \
+        --expert \
+        --command-fd 0 \
+        --pinentry-mode loopback \
+        --passphrase \"$5\"\
+        --gen-revoke \"${4// /}\" \
+        >>\"$file_name\" \
+    " >/dev/null
+    [ 0 -eq "$?" ] || \
+        report_error "Unable to create the revocation certificate for the ${3^^} cert of ${2^^}."
+    printf " DONE \n"
+}
+
 # Extract public and secret, primary and sub keys to files
 store_cert() {
 # Args: 1 Keyring path
@@ -262,6 +329,8 @@ store_prime() {
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$export_dir" 'asc' 'cert' 'pub'
     # save the full secret cert
     extract_key "$1" "${2,,}" "$3" "${4// /}" "$extract_dir" 'gpg' 'cert' 'sec' "$good_pass"
+    # create a revocation certificate
+    generate_revocation "$1" "${2,,}" "$3" "${4// /}" "$good_pass"
     # change the passphrase for backup files
     new_pass "$1" "${4// /}" "$good_pass" "${prime_base}${pass_base}${2^^}"
     # save the primary secret key and full secret cert in asc and gpg formats

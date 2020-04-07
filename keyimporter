@@ -50,9 +50,9 @@
 #  in the keyring_list file, under the name 'ring_<kerying_name>'.     #
 #                                                                      #
 #       The <purpose> is one or more of auth, sign, crypt, ssh, or     #
-#           cert.                                                      #
+#           CERT.                                                      #
 #                                                                      #
-#       Any, or all, except cert may be in the list and each named     #
+#       Any, or all, except CERT may be in the list and each named     #
 #       purpose subkey will be imported. Missing subkey files will     #
 #       cause a fatal error. Use of auth implies ssh when the          #
 #       <config prefix> includes '_SSH' or '_GIT' and will likewise    #
@@ -63,7 +63,7 @@
 #       SSH data without having to import the auth subkey, though the  #
 #       utility of doing so seems pointless.                           #
 #                                                                      #
-#       A <purpose> of cert must be used with no other purpose or a    #
+#       A <purpose> of CERT must be used with no other purpose or a    #
 #       fatal error is generated.                                      #
 #                                                                      #
 #       If there is no <purpose> listed each of the three subkey types #
@@ -85,6 +85,8 @@ import_all() {
 #       2 Filename prefix
 #       3 config file basename
 #       4 passphrase
+# Return: none
+# Exitcode: 0
     for method in 'AUTH' 'CRYPT' 'SIGN'; do
         if [ -e "$import_dir/$2.ecc.key.${method,,}.ecc.sec.gpg" ]; then
             [[ $3 == *_SSH* ]] || [[ $3 == *_GIT* ]] && [[ $method == AUTH ]] && \
@@ -99,9 +101,21 @@ import_cert() {
 # Args: 1 Keyring path
 #       2 Filename prefix
 #       3 passphrase
+# Return: none
+# Exitcode: 0
     [ -e "$import_dir/$2.ecc.cert.sec.gpg" ] || \
         report_error "Required file, '$import_dir/$2.ecc.cert.sec.gpg', missing."
     import_key "$1" "$import_dir/$2.ecc.cert.sec.gpg" "$3"
+    fingerprint="$(gpg\
+        --with-colons\
+        --show-keys\
+        "$import_dir/$2.ecc.cert.sec.gpg"\
+        2>/dev/null |\
+        grep -A 1 sec|\
+        tail -n 1|\
+        awk -F : -e '{printf $10}'\
+    )"
+    cp "$extract_dir/$2.ecc.cert.rev" "$1/openpgp-revocs.d/$fingerprint.rev"
 }
 
 # Low-level routine to import a key/cert into the keyring
@@ -109,6 +123,8 @@ import_key() {
 # Args: 1 Keyring path
 #       2 Filename
 #       3 passphrase
+# Return: none
+# Exitcode: 0
     printf "%s" "$3" | gpg \
         --homedir "$1" \
         --batch \
@@ -126,6 +142,8 @@ import_one() {
 #       3 config file basename
 #       4 subkey purpose
 #       5 passphrase
+# Return: none
+# Exitcode: 0 (terminates on error)
     case "${4^^}" in
         AUTH )
             [[ $3 == *_SSH* ]] || [[ $3 == *_GIT* ]] && \
@@ -151,6 +169,8 @@ import_one() {
 import_ssh() {
 # Args: 1 Keyring path
 #       2 Filename prefix
+# Return: none
+# Exitcode: 0 (terminates on error)
     [ -e "$export_dir/$2.ecc.key.ssh.ecc.pub" ] || \
         report_error "Rquired file, '$export_dir/$2.ecc.key.ssh.ecc.pub', missing."
     mkdir -p "$1/.ssh"
