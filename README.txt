@@ -60,7 +60,7 @@ Usage of keyimporter
 ---------------------------------------------------------------------
 
     keyimporter <ring_name> <config prefix>
-    keyimporter <ring_name> <config prefix> cert
+    keyimporter <ring_name> <config prefix> CERT
     keyimporter <ring_name> <config prefix> \
         auth|crypt|sign|ssh [auth|crypt|sign|ssh] ...
 
@@ -69,9 +69,9 @@ of a configuration file, and optionally a list of purposes and
 imports the subkeys selected by the configuration file and the listed
 purposes.
 
-Used with the purpose of 'cert', with nothing else in the list, will
+Used with the purpose of 'CERT', with nothing else in the list, will
 import the full certificate, including the primary key which is
-intended to _not_ be in the working keyring. Placing 'cert' in a list,
+intended to _not_ be in the working keyring. Placing 'CERT' in a list,
 first or otherwise, causes an error.
 
 Used with nothing in the purpose list the available subkey for each

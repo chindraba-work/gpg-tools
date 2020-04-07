@@ -2,6 +2,10 @@
 
 ## Changelog
 
+### v1.1.1
+-   Add revocation certificate to the import process
+-   Add generation of revocation certificates to the exporting
+
 ### v1.1.0
 -   Add keyimporter command to import keys from files made using certsplitrer, or any other way.
 
