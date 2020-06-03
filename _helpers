@@ -8,7 +8,7 @@
 #  and certificates using GnuPG.                                       #
 #                                                                      #
 #  Copyright © 2020  Chindraba (Ronald Lamoreaux)                      #
-#                    <aoc@chindraba.work>                              #
+#                    <gpg-tools@chindraba.work>                        #
 #  - All Rights Reserved                                               #
 #                                                                      #
 #  Permission is hereby granted, free of charge, to any person         #
@@ -42,6 +42,35 @@ ecc_filter='..25519'
 rsa_filter=':23'
 sub_filter='^ssb'
 sec_filter='^sec'
+
+# gpg command line option groups
+# gpg basic options
+gpg_base_options=(
+    --no-options
+    --with-colons
+    --homedir
+)
+# option for using batch mode
+gpg_batch_mode=(
+    --yes
+    --expert
+    --batch
+)
+# option for when the passphrase is included in the options
+gpg_with_pin=(
+    --pinentry-mode loopback
+    --passphrase
+)
+# option for a single passphrase piped in
+gpg_one_pin=(
+    --pinentry-mode loopback
+    --passphrase-fd 0
+)
+# option for multiple passphrases piped it
+gpg_two_pin=(
+    --pinentry-mode loopback
+    --command-fd 0
+)
 
 # Routine for error condition messages and aborting.
 report_error() {
@@ -93,16 +122,13 @@ check_pass() {
 #       passphrase to test
 # Return: none
 # Exitcode: T/F valid/invalid passphrase
-    printf "%s" "$3" \
-    | gpg \
-        --homedir $1 \
-        --batch \
-        --yes \
-        --expert \
-        --pinentry-mode loopback \
-        --passphrase-fd 0 \
-        --export-secret-key "${2// /}" \
-    >/dev/null 2>/dev/null
+    cmd_options=(
+        ${gpg_base_options[@]} "$1"
+        ${gpg_batch_mode[@]}
+        ${gpg_one_pin[@]}
+        --export-secret-key "${2// /}"
+    )
+    printf "%s" "$3" | gpg ${cmd_options[@]} >/dev/null 2>/dev/null
 }
 
 # Routine to find the valid passpharse for a certificate
@@ -129,17 +155,13 @@ new_pass() {
 #       new passphrase
 # Return: nothing
 # Exitcode: 0 (terminates on error)
-    checking="$(\
-        printf "%s\n%s\n%s\n" "$3" "$4" "$4" \
-        | gpg \
-            --homedir $1 \
-            --batch \
-            --yes \
-            --expert \
-            --pinentry-mode loopback \
-            --command-fd 0 --passwd "${2// /}" \
-        2>/dev/null\
-    )"
+    cmd_options=(
+        ${gpg_base_options[@]} "$1"
+        ${gpg_batch_mode[@]}
+        ${gpg_two_pin[@]}
+        --passwd "${2// /}"
+    )
+    checking="$(printf "%s\n%s\n%s\n" "$3" "$4" "$4" | gpg ${cmd_options[@]} 2>/dev/null)"
     [ 0 -eq $? ] || \
         report_error "Changing passphrase on ${2// /} failed."
 }
@@ -151,19 +173,14 @@ check_prime() {
 # Retrun: verified certificate ID
 # Exitcode: 0 (terminates on error)
     find_id="${2// /}"
-    test_id="$(\
-        gpg \
-            --homedir "$1" \
-            --with-colons \
-            --list-secret-keys $find_id \
-        2>/dev/null \
-        | grep -A 1 ^sec \
-        | tail -n 1 \
-        | awk -F : -e '{printf $10}'\
-    )"
+    cmd_options=(
+        ${gpg_base_options[@]} "$1"
+        --list-secret-keys "${2// /}"
+    )
+    test_id="$(gpg ${cmd_options[@]} 2>/dev/null|grep -A 1 ^sec|tail -n 1|awk -F : -e '{printf $10}')"
     [ 0 -eq $? ] || \
         report_error "Searching keyring $1 for cert id '$2' failed."
-    [ "$test_id" == "$find_id" ] || \
-        report_error "Searching for $find_id in keyring $1 returned $test_id. Mismatched ID's."
+    [ "$test_id" == "${2// /}" ] || \
+        report_error "Searching for $2 in keyring $1 returned $test_id. Mismatched ID's."
     printf "%s" $test_id
 }
