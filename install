@@ -1,0 +1,131 @@
+#! /usr/bin/env bash
+
+# SPDX-License-Identifier: MIT
+
+########################################################################
+#                                                                      #
+#  This file is part of collection of scripts for working with keys    #
+#  and certificates using GnuPG.                                       #
+#                                                                      #
+#  Copyright © 2020  Chindraba (Ronald Lamoreaux)                      #
+#                    <gpg-tools@chindraba.work>                        #
+#  - All Rights Reserved                                               #
+#                                                                      #
+#  Permission is hereby granted, free of charge, to any person         #
+#  obtaining a copy of this software and associated documentation      #
+#  files (the "Software"), to deal in the Software without             #
+#  restriction, including without limitation the rights to use, copy,  #
+#  modify, merge, publish, distribute, sublicense, and/or sell copies  #
+#  of the Software, and to permit persons to whom the Software is      #
+#  furnished to do so, subject to the following conditions:            #
+#                                                                      #
+#  The above copyright notice and this permission notice shall be      #
+#  included in all copies or substantial portions of the Software.     #
+#                                                                      #
+#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,     #
+#  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF  #
+#  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND               #
+#  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS #
+#  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN  #
+#  ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN   #
+#  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE    #
+#  SOFTWARE.                                                           #
+#                                                                      #
+########################################################################
+
+########################################################################
+#                                                                      #
+#  Script to install the gpg-tools scripts into the directories needed #
+#  based on the XDG standards.                                         #
+#                                                                      #
+########################################################################
+
+base_project_path='chindraba/gpg-tools'
+declare -a config_file_list=(.config keyring_list)
+declare -a helper_file_list=(_helpers)
+declare -a script_file_list=(certsplitter keyimporter)
+
+# Routine to create, if needed, the directory requested
+check_project_path() {
+    # Nothing supplied is a fatal error
+    [ -z "$1" ] && exit 1
+    checked_path="$1"
+    # Nothing to do if it exists
+    [ -d "${checked_path}" ] && return
+    # Create the directory, and all needed parents
+    mkdir -p "${checked_path}" 2>/dev/null
+    # According to the XDG spec, user directories are permissioned 0700
+    chmod 0700 "${checked_path}"
+}
+
+# Routine to set, and check, the XDG and project directories
+set_project_paths() {
+    # Nothing supplied is a fatal error
+    [ -z "$1" ] && exit 1
+    project_path="$1"
+    # The user-specific config directory
+    ${XDG_CONFIG_HOME:=$HOME/.config} 2>/dev/null
+    check_project_path "${XDG_CONFIG_HOME}"
+    check_project_path "${XDG_CONFIG_HOME}/${project_path}"
+    PRJ_CONFIG_PATH="${XDG_CONFIG_HOME}/${project_path}"
+    # The user-sepcific data directory
+    ${XDG_DATA_HOME:=$HOME/.local/share} 2>/dev/null
+    check_project_path "${XDG_DATA_HOME}"
+    check_project_path "${XDG_DATA_HOME}/${project_path}"
+    PRJ_DATA_PATH="${XDG_DATA_HOME}/${project_path}"
+    # The user-specific cache directory
+    ${XDG_CACHE_HOME:=$HOME/.cache} 2>/dev/null
+    check_project_path "${XDG_CACHE_HOME}"
+    check_project_path "${XDG_CACHE_HOME}/${project_path}"
+    PRJ_CACHE_PATH="${XDG_CACHE_HOME}/${project_path}"
+    # Set, without checking, the user-specific runtime directory
+    # If it is missing it will probably be an error when needed, but
+    # the creation, and maintenance of it is a system-level task
+    ${XDG_RUNTIME_DIR:=/run/user/"$(id -ru)"} 2>/dev/null
+    # Only set, without checking for, the system-wide settings
+    ${XDG_DATA_DIRS:=/usr/local/share/:/usr/share/} 2>/dev/null
+    ${XDG_CONFIG_DIRS:=/etc/xdg} 2>/dev/null
+}
+
+# Find the real directory containing this script. Need to know where
+# we are so that the other files can be copied or linked properly.
+get_install_base() {
+    install_base="${BASH_SOURCE[0]}"
+    while [ -L "$install_base" ]; do
+      install_base_dir="$( cd -P "$( dirname "$install_base" )" && pwd )"
+      install_base="$(readlink "$install_base")"
+      [[ $install_base != /* ]] && install_base="$install_base_dir/$install_base"
+    done
+    install_base_dir="$( cd -P "$( dirname "$install_base" )" && pwd )";
+    printf "%s" "$install_base_dir"
+}
+
+# Default, blank, config files are created in the user config dir
+install_configs() {
+    for config_file in ${config_file_list[*]}; do
+        cp -p "${base_dir}/${config_file}" "${PRJ_CONFIG_PATH}/"
+    done
+}
+
+# Supporting scripts are placed in the user data directory in an
+# effort to keep the ~/bin directory clean.
+install_helpers() {
+    for helper_file in ${helper_file_list[*]}; do
+        cp -p "${base_dir}/${helper_file}" "${PRJ_DATA_PATH}/"
+    done
+}
+
+# Link the active scripts into the user bin directory
+install_scripts() {
+    for script_file in ${script_file_list[*]}; do
+        ln -s "${base_dir}/${script_file}" "${HOME}/bin/${script_file}"
+    done
+}
+
+base_dir="$(get_install_base)"
+check_project_path "${HOME}/bin"
+set_project_paths "${base_project_path}"
+install_configs
+install_helpers
+install_scripts
+
