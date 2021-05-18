@@ -1,0 +1,8 @@
+/*  Global styles and overrides beyond what the reset sheet has done */
+body {
+  margin: 0;
+  padding: 0;
+  line-height: 1.15;
+  font-family: sans-serif;
+}
+
